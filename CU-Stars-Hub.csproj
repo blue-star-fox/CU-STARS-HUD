@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  CU Stats HUD — 编译工程（BepInEx 5 / Unity 2022.3 Mono / net48）
 
+  游戏程序集直接引用本机安装目录，不把游戏 DLL 复制进仓库：
+    默认 GameDir 指向 Steam 安装位置，可用命令行覆盖：
+      dotnet build -c Release -p:GameDir="D:\...\Casualties Unknown Demo"
+
+  产物：bin\CUStatsHud.dll  →  复制到 BepInEx\plugins\ 即可。
+-->
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
@@ -13,11 +21,11 @@
     <OutputPath>bin\</OutputPath>
     <DebugType>portable</DebugType>
     <Deterministic>true</Deterministic>
-    
+    <!-- 中文源码统一按 UTF-8 读取，避免 MSBuild 在中文区域设置下误判代码页 -->
     <CodePage>65001</CodePage>
   </PropertyGroup>
 
-  
+  <!-- ===== 游戏安装路径（唯一需要按机器调整的地方） ===== -->
   <PropertyGroup>
     <GameDir Condition="'$(GameDir)' == ''">G:\SteamLibrary\steamapps\common\Casualties Unknown Demo</GameDir>
     <GameManaged>$(GameDir)\CasualtiesUnknown_Data\Managed</GameManaged>
@@ -33,7 +41,8 @@
            Text="找不到 Harmony：$(BepInExCore)\0Harmony.dll。BepInEx 5 自带该文件，请检查安装是否完整。" />
   </Target>
 
-  
+  <!-- ===== 引用的程序集 =====
+       联机 MOD (KrokoshaCasualtiesMP) 只通过反射访问，故无需引用，插件在单机/无 MOD 环境同样可用。 -->
   <ItemGroup>
     <Reference Include="Assembly-CSharp">
       <HintPath>$(GameManaged)\Assembly-CSharp.dll</HintPath>
@@ -43,7 +52,7 @@
       <HintPath>$(BepInExCore)\BepInEx.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    
+    <!-- HarmonyX：游戏行为统计的采集点（BepInEx 5 自带） -->
     <Reference Include="0Harmony">
       <HintPath>$(BepInExCore)\0Harmony.dll</HintPath>
       <Private>false</Private>
@@ -72,14 +81,16 @@
       <HintPath>$(GameManaged)\UnityEngine.Physics2DModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    
+    <!-- Texture2D.LoadImage（解析内嵌 PNG）所在模块 -->
     <Reference Include="UnityEngine.ImageConversionModule">
       <HintPath>$(GameManaged)\UnityEngine.ImageConversionModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
 
-  
+  <!-- ===== 内嵌 emoji 图标 =====
+       逻辑名固定为 CUStatsHud.emoji.<码点>，运行期按码点取资源；
+       文件名即 Unicode 码点（Twemoji 命名），详见 emoji/README.md。 -->
   <ItemGroup>
     <EmbeddedResource Include="emoji\*.png">
       <LogicalName>CUStatsHud.emoji.%(Filename)</LogicalName>

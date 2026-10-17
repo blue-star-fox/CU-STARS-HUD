@@ -1,10 +1,13 @@
-using System;
 using CuStatsHud.Core;
 using UnityEngine;
 
 namespace CuStatsHud.UI.Panels
 {
-    
+    /// <summary>
+    /// 设置页：只保留可操作项本身，不放任何说明文字
+    /// （说明与版本信息统一收进「关于」窗口）。
+    /// 所有改动即时写入 BepInEx 配置，键名与 v1.2 兼容。
+    /// </summary>
     internal static class SettingsPanel
     {
         public static float Draw(HudState s, Rect area, float scrollOffset)
@@ -19,10 +22,13 @@ namespace CuStatsHud.UI.Panels
 
             Layout l = new Layout(area.x, -scrollOffset, area.width);
 
+            // ---------------- 显示 ----------------
             l.Gap(gap);
             Widgets.SectionHeader(l.Take(sectionH), "显示", null, st);
             l.Gap(th.Px(3f));
 
+            // 注意：ConfigEntry.Value 的 setter 会立刻把配置写盘，
+            // 所以先把滑块结果量化到 0.05 步进，避免拖动时每帧写文件。
             float opacity = SliderRow(ref l, "面板不透明度", cfg.Opacity.Value, 0.3f, 1f,
                 VitalRules.Pct01(cfg.Opacity.Value), th, st);
             float opacityStep = Mathf.Round(opacity / 0.05f) * 0.05f;
@@ -64,106 +70,36 @@ namespace CuStatsHud.UI.Panels
                 cfg.FontMode.Value = FontProvider.ModeGame;
             }
 
+            // 当前实际生效的字体：切换字体后能立刻确认有没有生效
             GUI.Label(l.Take(th.SmallLine()),
                 "<color=" + Theme.HexMuted + ">当前使用："
                 + (string.IsNullOrEmpty(s.Fonts.ResolvedName) ? "默认字体" : s.Fonts.ResolvedName)
                 + "</color>", st.Tiny);
 
+            // 界面风格：CU-UI / 游戏风格（只换配色，圆角一致）
             l.Gap(gap * 0.5f);
             GUI.Label(l.Take(th.Font(2) * 1.4f), "<color=" + Theme.HexMuted + ">界面风格</color>", st.Tiny);
             Rect skinRow = l.Take(rowH, gap);
             string skin = cfg.Skin.Value ?? "fox";
             bool gameSkin = string.Equals(skin, "game", System.StringComparison.OrdinalIgnoreCase);
-            bool customSkin = string.Equals(skin, "custom", System.StringComparison.OrdinalIgnoreCase);
-            bool foxSkin = !gameSkin && !customSkin;
-            float skinThird = (skinRow.width - gap * 2f) / 3f;
+            float half = (skinRow.width - gap) * 0.5f;
 
-            if (Widgets.Segment(new Rect(skinRow.x, skinRow.y, skinThird, skinRow.height), "原版", foxSkin, st)
-                && !foxSkin)
+            if (Widgets.Segment(new Rect(skinRow.x, skinRow.y, half, skinRow.height), "CU-UI", !gameSkin, st)
+                && gameSkin)
             {
                 cfg.Skin.Value = "fox";
             }
-            if (Widgets.Segment(new Rect(skinRow.x + skinThird + gap, skinRow.y, skinThird, skinRow.height), "游戏风格", gameSkin, st)
+            if (Widgets.Segment(new Rect(skinRow.x + half + gap, skinRow.y, half, skinRow.height), "游戏风格", gameSkin, st)
                 && !gameSkin)
             {
                 cfg.Skin.Value = "game";
-            }
-            if (Widgets.Segment(new Rect(skinRow.x + (skinThird + gap) * 2f, skinRow.y, skinThird, skinRow.height), "自定义", customSkin, st)
-                && !customSkin)
-            {
-                cfg.Skin.Value = "custom";
-            }
-
-            if (customSkin)
-            {
-                l.Gap(gap * 0.5f);
-                GUI.Label(l.Take(th.SmallLine()), "<color=" + Theme.HexMuted + ">色相</color>", st.Tiny);
-                cfg.CustomHue.Value = Widgets.Slider(l.Take(rowH, th.Px(2f)), cfg.CustomHue.Value, 0f, 1f, st);
-
-                GUI.Label(l.Take(th.SmallLine()), "<color=" + Theme.HexMuted + ">底色明度</color>", st.Tiny);
-                cfg.CustomDark.Value = Widgets.Slider(l.Take(rowH, th.Px(2f)), cfg.CustomDark.Value, 0f, 1f, st);
-
-                GUI.Label(l.Take(th.SmallLine()), "<color=" + Theme.HexMuted + ">强调强度</color>", st.Tiny);
-                cfg.CustomSaturation.Value = Widgets.Slider(l.Take(rowH, gap), cfg.CustomSaturation.Value, 0f, 1f, st);
-
-                Rect preview = l.Take(th.SectionHeight(), gap);
-                float swW = (preview.width - gap * 3f) / 4f;
-                Swatch(new Rect(preview.x, preview.y, swW, preview.height), Theme.PanelBg, st);
-                Swatch(new Rect(preview.x + (swW + gap), preview.y, swW, preview.height), Theme.CardBg, st);
-                Swatch(new Rect(preview.x + (swW + gap) * 2f, preview.y, swW, preview.height), Theme.Outline, st);
-                Swatch(new Rect(preview.x + (swW + gap) * 3f, preview.y, swW, preview.height), Theme.Accent, st);
             }
 
             l.Gap(gap);
             cfg.ShowEmoji.Value = Widgets.Toggle(l.Take(rowH, gap), cfg.ShowEmoji.Value,
                 "显示 emoji 图标", st);
 
-            l.Gap(gap * 0.5f);
-
-            Rect bgHead = l.Take(th.SmallLine());
-            GUI.Label(new Rect(bgHead.x, bgHead.y, bgHead.width * 0.55f, bgHead.height),
-                "<color=" + Theme.HexMuted + ">底图透明度</color>", st.Tiny);
-            
-            GUI.Label(new Rect(bgHead.x + bgHead.width * 0.55f, bgHead.y,
-                bgHead.width * 0.45f, bgHead.height),
-                "<color=" + Theme.HexSecondary + ">"
-                + Mathf.RoundToInt(cfg.BackgroundOpacity.Value * 100f) + "%</color>", st.TinyRight);
-
-            cfg.BackgroundOpacity.Value = Widgets.Slider(l.Take(rowH, th.Px(2f)),
-                cfg.BackgroundOpacity.Value, 0.01f, 1f, st);
-
-            Rect bgRow = l.Take(rowH, th.Px(2f));
-            bool hasBackground = s.Styles != null && s.Styles.BackgroundImage != null;
-
-            Rect toggleRect = new Rect(bgRow.x, bgRow.y, Mathf.Max(24f, bgRow.width * 0.30f), bgRow.height);
-            bool enabled = cfg.BackgroundEnabled.Value;
-            cfg.BackgroundEnabled.Value = Widgets.Toggle(toggleRect, enabled, "显示底图", st);
-
-            Rect pickRect = new Rect(toggleRect.xMax + th.Px(6f), bgRow.y,
-                Mathf.Max(60f, bgRow.width - toggleRect.width - th.Px(6f)), bgRow.height);
-            if (Widgets.Button(pickRect, hasBackground ? "换一张图…" : "选择底图…", false, st))
-            {
-                
-                string start = s.PickerDir;
-                if (string.IsNullOrEmpty(start))
-                {
-                    try
-                    {
-                        start = System.Environment.GetFolderPath(
-                            System.Environment.SpecialFolder.MyPictures);
-                    }
-                    catch (Exception)
-                    {
-                        start = s.BackgroundDir;
-                    }
-                }
-                s.PickerLoad(start);
-                s.ShowFilePicker = true;
-            }
-
-            GUI.Label(l.Take(th.SmallLine()),
-                "<color=" + Theme.HexMuted + ">当前图片：" + (cfg.BackgroundFile.Value ?? "未选择") + "</color>", st.Tiny);
-
+            // ---------------- 交互 ----------------
             l.Gap(gap);
             Widgets.SectionHeader(l.Take(sectionH), "交互", null, st);
             l.Gap(th.Px(3f));
@@ -180,6 +116,7 @@ namespace CuStatsHud.UI.Panels
                 s.Note("面板位置已复位");
             }
 
+            // ---------------- 组件卡 ----------------
             l.Gap(gap);
             Widgets.SectionHeader(l.Take(sectionH), "组件卡", null, st);
             l.Gap(th.Px(3f));
@@ -193,6 +130,7 @@ namespace CuStatsHud.UI.Panels
                 s.Note("从右侧拖动组件卡到屏幕上，完成后点保存");
             }
 
+            // ---------------- 监护 ----------------
             l.Gap(gap);
             Widgets.SectionHeader(l.Take(sectionH), "监护", null, st);
             l.Gap(th.Px(3f));
@@ -208,6 +146,7 @@ namespace CuStatsHud.UI.Panels
             cfg.ShowNormalSecondary.Value = Widgets.Toggle(l.Take(rowH, gap), cfg.ShowNormalSecondary.Value,
                 "始终显示次要指标", st);
 
+            // ---------------- 关于 ----------------
             l.Gap(gap);
             Widgets.SectionHeader(l.Take(sectionH), "关于", null, st);
             l.Gap(th.Px(3f));
@@ -220,14 +159,7 @@ namespace CuStatsHud.UI.Panels
             return l.Y + scrollOffset;
         }
 
-        private static void Swatch(Rect rect, Color color, HudStyles st)
-        {
-            Color old = GUI.color;
-            GUI.color = color;
-            st.DrawBox(rect, st.CardWhite);
-            GUI.color = old;
-        }
-
+        /// <summary>一行快捷键绑定：标题 + 按键按钮。</summary>
         private static void KeybindRow(ref Layout l, HudState s, string label, int target, float rowH, float gap,
             Theme th, HudStyles st)
         {
@@ -249,6 +181,7 @@ namespace CuStatsHud.UI.Panels
             }
         }
 
+        /// <summary>一行滑块：标题 + 当前值 + 滑轨。返回新值。</summary>
         private static float SliderRow(ref Layout l, string label, float value, float min, float max,
             string display, Theme th, HudStyles st)
         {

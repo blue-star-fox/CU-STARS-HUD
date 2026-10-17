@@ -3,7 +3,12 @@ using UnityEngine;
 
 namespace CuStatsHud.UI
 {
-    
+    /// <summary>
+    /// 程序化 16×16 几何图标。不依赖任何美术资源，随主题色/尺寸生成并缓存。
+    ///
+    /// 形状坐标系：u 向右 0→16，v 向下 0→16（即 v=0 在屏幕顶部），
+    /// 这样写形状时和肉眼看到的完全一致，不会有上下颠倒的坑。
+    /// </summary>
     internal sealed class IconFactory
     {
         private const float Design = 16f;
@@ -17,6 +22,7 @@ namespace CuStatsHud.UI
             _size = Mathf.Clamp(pixelSize, 12, 34);
         }
 
+        /// <summary>取图标纹理；kind 为空返回 null，未知 kind 回退为圆形。</summary>
         public Texture2D Get(string kind, Color color)
         {
             if (string.IsNullOrEmpty(kind)) return null;
@@ -77,6 +83,10 @@ namespace CuStatsHud.UI
             return tex;
         }
 
+        // ---------------------------------------------------------------
+        // 几何判定
+        // ---------------------------------------------------------------
+
         private static bool Circle(float u, float v, float cx, float cy, float r)
         {
             float dx = u - cx;
@@ -114,6 +124,7 @@ namespace CuStatsHud.UI
             return !(hasNeg && hasPos);
         }
 
+        /// <summary>点到线段的距离是否小于 thickness（用于描线型图标）。</summary>
         private static bool Segment(float u, float v, float x1, float y1, float x2, float y2, float thickness)
         {
             float dx = x2 - x1;
@@ -132,6 +143,7 @@ namespace CuStatsHud.UI
             return ex * ex + ey * ey <= thickness * thickness;
         }
 
+        /// <summary>标准数学角度（向上为 +90°），用于辐射符号的三叶。</summary>
         private static float AngleDeg(float u, float v, float cx, float cy)
         {
             return Mathf.Atan2(-(v - cy), u - cx) * Mathf.Rad2Deg;
@@ -142,6 +154,10 @@ namespace CuStatsHud.UI
             float diff = Mathf.Abs(Mathf.DeltaAngle(angle, target));
             return diff <= tolerance;
         }
+
+        // ---------------------------------------------------------------
+        // 形状表
+        // ---------------------------------------------------------------
 
         private static bool Shape(string kind, float u, float v)
         {
@@ -171,13 +187,13 @@ namespace CuStatsHud.UI
                     return Rect(u, v, 5.8f, 1.4f, 10.2f, 14.6f) || Rect(u, v, 1.4f, 5.8f, 14.6f, 10.2f);
 
                 case "close":
-                    
+                    // 右上角关闭按钮：两条对角线
                     if (Segment(u, v, 3.6f, 3.6f, 12.4f, 12.4f, 1.35f)) return true;
                     return Segment(u, v, 12.4f, 3.6f, 3.6f, 12.4f, 1.35f);
 
                 case "brain":
                     if (!(Circle(u, v, 8f, 7.4f, 5.3f) || Rect(u, v, 6.8f, 10f, 9.2f, 14.6f))) return false;
-                    
+                    // 中央沟 + 两侧凹陷，做出“脑”的辨识度
                     if (Rect(u, v, 7.5f, 3.4f, 8.5f, 12.4f)) return false;
                     if (Circle(u, v, 3.9f, 4.6f, 1.5f)) return false;
                     if (Circle(u, v, 12.1f, 4.6f, 1.5f)) return false;

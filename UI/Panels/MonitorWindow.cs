@@ -4,14 +4,24 @@ using UnityEngine;
 
 namespace CuStatsHud.UI
 {
-    
+    /// <summary>
+    /// 监护仪主窗口：外框、标题栏（含关闭按钮）、状态条、波形区、标签栏、内容区与底栏。
+    ///
+    /// 不继承 GUI.Window：拖动/缩放/滚动全部自行处理，
+    /// 这样坐标确定、几何可持久化，也不会和游戏自身的 IMGUI 窗口 ID 冲突。
+    /// 所有竖向尺寸都来自 <see cref="Theme"/> 的字体度量，任意字号/缩放组合下都不会重叠。
+    ///
+    /// 信息不重复：标题栏只放名称与关闭按钮，数值只在波形区通道块里出现一次，
+    /// 状态条只写状态本身、不列举指标名（指标在下方卡片中）。
+    /// </summary>
     internal static class MonitorWindow
     {
-        
+        // 走属性而不是 const：配色随皮肤变化，const 在编译期就固化了
         private static string MutedHex { get { return Theme.HexMuted; } }
         private const string NoValue = "—";
 
-        private static readonly string[] TabIconKinds = { "vitals", "limbs", "mates", "stats", "settings" };
+        /// <summary>标签栏图标种类，与 <see cref="HudState.TabNames"/> 一一对应。</summary>
+        private static readonly string[] TabIconKinds = { "vitals", "limbs", "mates", "settings", "stats" };
 
         public static void Draw(HudState s)
         {
@@ -20,10 +30,12 @@ namespace CuStatsHud.UI
             HudStyles st = s.Styles;
             Theme th = s.Theme;
 
+            // 模态窗口（关于 / 队友详情）打开时，主窗口不再响应拖动与缩放
             if (!s.HasModal) HandleDragAndResize(s);
 
             Rect win = s.Window;
 
+            // ---- 投影 + 面板本体 ----
             Color old = GUI.color;
             GUI.color = new Color(0f, 0f, 0f, 0.38f * old.a);
             st.DrawBox(new Rect(win.x - 2f, win.y + 3f, win.width + 4f, win.height + 4f), st.CardWhite);
@@ -33,6 +45,7 @@ namespace CuStatsHud.UI
 
             bool closeClicked = false;
 
+            // ---- 面板内部：统一使用局部坐标 ----
             GUI.BeginGroup(win);
             try
             {
@@ -50,6 +63,7 @@ namespace CuStatsHud.UI
                 st.DrawHairline(new Rect(pad, y, innerWidth, 1f));
                 y += 1f + gap * 0.55f;
 
+                // 状态条：始终显示，颜色与闪烁表达当前档位
                 if (s.Config.AlertsEnabled.Value)
                 {
                     float bannerH = th.AlarmHeight();
@@ -112,10 +126,16 @@ namespace CuStatsHud.UI
             if (closeClicked) s.Visible = false;
         }
 
+        // ===============================================================
+        // 标题栏：状态灯 + 名称 + 关闭按钮
+        // ===============================================================
+
         private static bool DrawHeader(HudState s, Rect rect, HudStyles st, Theme th)
         {
             BodySnapshot snap = s.Snapshot;
 
+            // 标题栏做成面板内的独立圆角表面：
+            // 既符合现代系统的分层表面设计，也避免全宽直角从面板圆角外露出。
             Rect surface = new Rect(rect.x + th.Px(6f), rect.y + th.Px(6f),
                 Mathf.Max(20f, rect.width - th.Px(12f)), Mathf.Max(20f, rect.height - th.Px(10f)));
             st.DrawSurface(surface, st.CardRaised);
@@ -124,6 +144,7 @@ namespace CuStatsHud.UI
             Rect closeRect = new Rect(surface.xMax - th.Px(6f) - closeSize,
                 surface.y + (surface.height - closeSize) * 0.5f, closeSize, closeSize);
 
+            // 左侧状态指示灯（圆形）
             float dot = Mathf.Max(6f, th.Px(8f));
             float textX = surface.x + th.Px(10f);
             Color old = GUI.color;
@@ -149,6 +170,10 @@ namespace CuStatsHud.UI
 
             return Widgets.CloseButton(closeRect, st, s.Icons);
         }
+
+        // ===============================================================
+        // 波形区：每行 = 通道块（通道名 + 大数值） + 波形
+        // ===============================================================
 
         private static void DrawWaveRow(HudState s, Rect row, int channel, HudStyles st, Theme th)
         {
@@ -193,6 +218,7 @@ namespace CuStatsHud.UI
             Rect waveRect = new Rect(row.x + blockW + th.Px(4f), row.y,
                 Mathf.Max(10f, row.width - blockW - th.Px(4f)), row.height);
 
+            // 通道块：通道名与数值都用通道色；指标异常时数值转为分级色
             string hex = ColorHex(color);
             string valueHex = severity >= Severity.Notice ? Theme.ValueHex(severity) : hex;
 
@@ -211,11 +237,12 @@ namespace CuStatsHud.UI
 
             if (channel == 1)
             {
-                
+                // 血氧是浓度，用浓度条而不是波形（波形看不出浓度高低）
                 Widgets.Spo2Gauge(waveRect, valid, snap.BloodOxygen, st);
                 return;
             }
 
+            // 波形纸带：尺寸由绘制阶段记录，纹理分配在 Update 阶段完成
             s.WaveWidth = Mathf.RoundToInt(Mathf.Max(0f, waveRect.width - 2f));
             s.WaveHeight = Mathf.RoundToInt(Mathf.Max(0f, waveRect.height - 2f));
 
@@ -245,6 +272,10 @@ namespace CuStatsHud.UI
                 + ((int)(c.b * 255f)).ToString("X2");
         }
 
+        // ===============================================================
+        // 标签栏
+        // ===============================================================
+
         private static void DrawTabs(HudState s, Rect rect, HudStyles st, Theme th)
         {
             float gap = th.Px(6f);
@@ -267,6 +298,10 @@ namespace CuStatsHud.UI
             }
         }
 
+        // ===============================================================
+        // 内容区
+        // ===============================================================
+
         private static void DrawContent(HudState s, Rect area, HudStyles st, Theme th)
         {
             ScrollState scroll = s.Scroll;
@@ -274,16 +309,14 @@ namespace CuStatsHud.UI
             GUI.BeginGroup(area);
             try
             {
-                
+                // 组内坐标以 area 左上角为原点，鼠标位置同样是组内坐标
                 Rect view = new Rect(0f, 0f, area.width, area.height);
                 Widgets.ScrollInput(view, scroll, st);
 
                 float ease = s.TabAnimation();
-                
-                float offX = (1f - ease) * th.Px(32f) * s.TabAnimDir;
+                float offX = (1f - ease) * th.Px(18f) * s.TabAnimDir;
                 Color old = GUI.color;
-                
-                GUI.color = new Color(old.r, old.g, old.b, old.a * Mathf.Lerp(0.35f, 1f, ease));
+                GUI.color = new Color(old.r, old.g, old.b, old.a * ease);
 
                 float contentWidth = Mathf.Max(80f, view.width - th.Px(9f));
                 Rect panelArea = new Rect(offX, 0f, contentWidth, 0f);
@@ -304,7 +337,7 @@ namespace CuStatsHud.UI
                         measured = Panels.StatsPanel.Draw(s, panelArea, scroll.Offset);
                         break;
                     default:
-                        
+                        // 主面板的波形区已常显心率/血氧/呼吸，列表里跳过以免重复
                         measured = Panels.VitalsPanel.Draw(s, s.Snapshot, panelArea, 0f, scroll.Offset,
                             s.Config.WaveformsEnabled.Value);
                         break;
@@ -316,7 +349,7 @@ namespace CuStatsHud.UI
             }
             catch (Exception ex)
             {
-                
+                // 同时落进日志：底栏提示 4 秒就消失，出问题时基本抓不到
                 s.Note("内容绘制异常：" + ex.Message);
                 HudState.Log.LogError("标签页内容绘制异常：" + ex);
             }
@@ -325,6 +358,10 @@ namespace CuStatsHud.UI
                 GUI.EndGroup();
             }
         }
+
+        // ===============================================================
+        // 底栏：只放临时提示与刷新时间（操作说明在关于窗口里）
+        // ===============================================================
 
         private static void DrawFooter(HudState s, Rect rect, HudStyles st, Theme th)
         {
@@ -348,6 +385,10 @@ namespace CuStatsHud.UI
                 "<color=" + MutedHex + ">" + right + "</color>", st.TinyRight);
         }
 
+        // ===============================================================
+        // 拖动 / 缩放
+        // ===============================================================
+
         private static void HandleDragAndResize(HudState s)
         {
             Event e = Event.current;
@@ -360,12 +401,16 @@ namespace CuStatsHud.UI
             float grip = th.Px(18f);
             Rect gripRect = new Rect(win.xMax - grip, win.yMax - grip, grip, grip);
 
+            // 两个控件 ID 每帧都按固定顺序申请，保证跨帧稳定
             int resizeId = GUIUtility.GetControlID(FocusType.Passive);
             int dragId = GUIUtility.GetControlID(FocusType.Passive);
 
             float minW = Mathf.Min(s.MinWindowWidth(), Screen.width);
             float minH = Mathf.Min(s.MinWindowHeight(), Screen.height);
 
+            // ---- 右下角缩放 ----
+            // 注意：MouseUp 的收尾必须无条件执行，否则一旦拖动中途 Resizable 被改成 false，
+            // hotControl 会永久钉在本控件上，面板内所有控件都失去响应。
             switch (e.GetTypeForControl(resizeId))
             {
                 case EventType.MouseDown:
@@ -402,6 +447,8 @@ namespace CuStatsHud.UI
 
             if (s.Resizing) return;
 
+            // ---- 标题栏拖动 ----
+            // 关闭按钮所在区域不参与拖动，避免点关闭时把面板拖走
             float closeSize = th.CloseButtonSize();
             Rect closeRect = new Rect(win.xMax - th.Px(6f) - th.Px(6f) - closeSize,
                 win.y + (headerH - closeSize) * 0.5f, closeSize, closeSize);

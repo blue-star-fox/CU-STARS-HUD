@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace CuStatsHud.UI.Panels
 {
-    
+    /// <summary>空状态/错误提示块的公共实现。</summary>
     internal static class EmptyState
     {
         public static void Draw(ref Layout l, HudStyles styles, Theme theme, string message)
@@ -22,9 +22,15 @@ namespace CuStatsHud.UI.Panels
         }
     }
 
+    /// <summary>
+    /// 肢体页：顶部汇总（平均健康 / 最伤肢体 / 感染数 / 重伤数），
+    /// 下面是逐条肢体卡片，按严重度排序（要害优先）。
+    ///
+    /// 与生命体征页一样渲染**任意**快照，因此队友详情窗口直接复用。
+    /// </summary>
     internal static class LimbsPanel
     {
-        
+        /// <summary>绘制肢体内容。返回「内容底部相对内容区顶部的偏移」。</summary>
         public static float Draw(HudState s, BodySnapshot snap, Rect area, float top, float scrollOffset)
         {
             Theme th = s.Theme;

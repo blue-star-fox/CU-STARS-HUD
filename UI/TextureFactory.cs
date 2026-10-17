@@ -2,7 +2,10 @@ using UnityEngine;
 
 namespace CuStatsHud.UI
 {
-    
+    /// <summary>
+    /// 程序化纹理工厂。全部使用 <see cref="HideFlags.HideAndDontSave"/>，
+    /// 不参与场景保存，也不会被 Resources.UnloadUnusedAssets 回收后变成野指针。
+    /// </summary>
     internal static class TextureFactory
     {
         private static Texture2D New(int w, int h, FilterMode filter)
@@ -22,6 +25,12 @@ namespace CuStatsHud.UI
             return tex;
         }
 
+        /// <summary>
+        /// 抗锯齿实心圆（滑块 / 开关的手柄）。
+        ///
+        /// 手柄尺寸随缩放变化，且是正方形，所以只能靠**缩放绘制**来保证是正圆；
+        /// 走 9 宫格必然受「border ≤ 尺寸一半」的限制，小尺寸时圆角会被压成直角。
+        /// </summary>
         public static Texture2D Circle(int diameter, Color color)
         {
             diameter = Mathf.Max(4, diameter);
@@ -48,6 +57,7 @@ namespace CuStatsHud.UI
             return tex;
         }
 
+        /// <summary>抗锯齿圆角矩形，供 9 宫格拉伸（border = radius + 1）。</summary>
         public static Texture2D Rounded(int size, int radius, Color color)
         {
             size = Mathf.Max(8, size);
@@ -77,6 +87,12 @@ namespace CuStatsHud.UI
             return tex;
         }
 
+        /// <summary>
+        /// 抗锯齿的**圆角描边**（只有一圈边框着色、内部透明），同样供 9 宫格拉伸。
+        ///
+        /// 做法是「外圈覆盖率 − 内缩后的覆盖率」：单纯画四条直线会得到直角描边，
+        /// 套在圆角卡片上就会显得不匹配。
+        /// </summary>
         public static Texture2D RoundedOutline(int size, int radius, float thickness, Color color)
         {
             size = Mathf.Max(8, size);
@@ -109,6 +125,7 @@ namespace CuStatsHud.UI
             return tex;
         }
 
+        /// <summary>圆角矩形的有符号距离（负值在内部）。</summary>
         private static float SdRounded(float x, float y, float center, float inner, float radius)
         {
             float qx = Mathf.Abs(x - center) - inner;
@@ -118,6 +135,7 @@ namespace CuStatsHud.UI
             return Mathf.Min(Mathf.Max(qx, qy), 0f) + Mathf.Sqrt(ox * ox + oy * oy) - radius;
         }
 
+        /// <summary>胶囊形（两端半圆），用于标签、进度条、按钮。</summary>
         public static Texture2D Capsule(int w, int h, Color color)
         {
             w = Mathf.Max(4, w);
@@ -150,6 +168,11 @@ namespace CuStatsHud.UI
             return tex;
         }
 
+        /// <summary>
+        /// 监护仪网格纸：一个 cell×cell 的方块，左边界与下边界各 1px 亮线。
+        /// 用 DrawTextureWithTexCoords 平铺即可得到整片网格；
+        /// 需要“细网格 + 粗网格”时叠两层不同 cell 的即可。
+        /// </summary>
         public static Texture2D Grid(int cell, Color line)
         {
             cell = Mathf.Clamp(cell, 2, 64);
@@ -171,6 +194,7 @@ namespace CuStatsHud.UI
             return tex;
         }
 
+        /// <summary>竖向渐变，用于标题栏/内容区的层次感。</summary>
         public static Texture2D VerticalGradient(int height, Color top, Color bottom)
         {
             height = Mathf.Max(2, height);
@@ -178,13 +202,14 @@ namespace CuStatsHud.UI
             for (int y = 0; y < height; y++)
             {
                 float t = height == 1 ? 0f : (float)y / (height - 1);
-                
+                // 纹理坐标 y=0 在底部，因此底部使用 bottom
                 tex.SetPixel(0, y, Color.Lerp(bottom, top, t));
             }
             tex.Apply();
             return tex;
         }
 
+        /// <summary>径向柔光，用于危急告警的背景辉光。</summary>
         public static Texture2D Glow(int size, Color color)
         {
             size = Mathf.Clamp(size, 8, 256);
@@ -210,6 +235,7 @@ namespace CuStatsHud.UI
             return tex;
         }
 
+        /// <summary>顶部/底部 1px 高光线，用于卡片描边。</summary>
         public static Texture2D Hairline(int width, Color color)
         {
             width = Mathf.Clamp(width, 2, 512);

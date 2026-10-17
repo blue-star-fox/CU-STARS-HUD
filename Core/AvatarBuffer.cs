@@ -2,7 +2,7 @@ using System;
 
 namespace CuStatsHud.Core
 {
-    
+    /// <summary>与 UnityEngine.Color32 对应的最小像素结构，让本类不依赖 Unity（便于单测）。</summary>
     public struct Rgba32
     {
         public byte R;
@@ -19,9 +19,16 @@ namespace CuStatsHud.Core
         }
     }
 
+    /// <summary>
+    /// 头像处理：把 Steam 的方形头像转成带抗锯齿圆边（+1px 轮廓）的圆形贴图。
+    ///
+    /// <b>索引约定：</b>与 <c>Texture2D.GetPixels32/SetPixels32</c> 一致——行主序、y=0 在下方、
+    /// 索引为 <c>y * width + x</c>。源图与目标图都用同一约定，因此**不需要上下翻转**。
+    /// 这一点很容易搞错：索引写成列主序会把整幅图转置，换头像就会看到花屏。
+    /// </summary>
     public static class AvatarBuffer
     {
-        
+        /// <summary>边缘轮廓宽度（像素）与强度。</summary>
         private const float RingWidth = 1.2f;
         private const float RingStrength = 0.28f;
 
@@ -30,6 +37,10 @@ namespace CuStatsHud.Core
             return y * width + x;
         }
 
+        /// <summary>
+        /// 生成圆形头像：<paramref name="source"/> 为源图像素（行主序、y=0 在下方），
+        /// 输出 <paramref name="size"/>×<paramref name="size"/> 的圆形贴图。
+        /// </summary>
         public static Rgba32[] MakeCircular(Rgba32[] source, int sourceWidth, int sourceHeight, int size)
         {
             if (source == null || size <= 0) return null;
@@ -48,6 +59,7 @@ namespace CuStatsHud.Core
                     float dy = y - center;
                     float distance = (float)Math.Sqrt(dx * dx + dy * dy);
 
+                    // 圆外透明；圆边 1px 内做覆盖率过渡（抗锯齿）
                     float coverage = radius - distance + 0.5f;
                     if (coverage <= 0f)
                     {
@@ -60,6 +72,7 @@ namespace CuStatsHud.Core
                     float sampleY = (y + 0.5f) * sourceHeight / size - 0.5f;
                     Rgba32 pixel = SampleBilinear(source, sourceWidth, sourceHeight, sampleX, sampleY);
 
+                    // 最外一圈提亮，让头像在深色卡片上有轮廓
                     if (distance > radius - RingWidth)
                     {
                         pixel = Mix(pixel, new Rgba32(255, 255, 255, 255), RingStrength);
@@ -73,6 +86,7 @@ namespace CuStatsHud.Core
             return destination;
         }
 
+        /// <summary>双线性采样；越界按边缘钳制。</summary>
         public static Rgba32 SampleBilinear(Rgba32[] source, int width, int height, float x, float y)
         {
             if (x < 0f) x = 0f;
@@ -109,6 +123,7 @@ namespace CuStatsHud.Core
             return (byte)value;
         }
 
+        /// <summary>按比例混合两个像素。</summary>
         public static Rgba32 Mix(Rgba32 from, Rgba32 over, float t)
         {
             if (t <= 0f) return from;

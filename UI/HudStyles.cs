@@ -3,18 +3,27 @@ using UnityEngine;
 
 namespace CuStatsHud.UI
 {
-    
+    /// <summary>
+    /// 一次性构建全部纹理与 GUIStyle。
+    ///
+    /// 约定：所有圆角/胶囊底纹都通过 <see cref="Box"/>（圆角）与 <see cref="Pill"/>（胶囊）
+    /// 这两个可变样式绘制——绘制前换 <c>normal.background</c> 即可，
+    /// 因此不需要为每个状态各建一个 GUIStyle。
+    ///
+    /// 必须在 OnGUI 内构造（GUIStyle 依赖 GUI.skin），缩放或字号变化时整体重建。
+    /// </summary>
     internal sealed class HudStyles : IDisposable
     {
         public readonly Theme Theme;
 
+        // ---------- 底纹 ----------
         public Texture2D Panel;
-        
+        /// <summary>面板外描边（比面板大 1px 的圆角）。</summary>
         public Texture2D PanelOutline;
-        
+        /// <summary>卡片外描边（比卡片大 1px 的圆角）——现代系统设计的 1px 轮廓。</summary>
         public Texture2D Outline;
         public Texture2D CardNormal;
-        
+        /// <summary>正常状态的状态条底色（绿色调）。</summary>
         public Texture2D CardPositive;
         public Texture2D CardNotice;
         public Texture2D CardWarning;
@@ -24,19 +33,19 @@ namespace CuStatsHud.UI
         public Texture2D PillAccent;
         public Texture2D PillIdle;
         public Texture2D PillOn;
-        
+        /// <summary>纯白胶囊：配合 GUI.color 着色，可得到任意纯色胶囊（进度条/徽章）。</summary>
         public Texture2D PillWhite;
-        
+        /// <summary>纯白圆角：配合 GUI.color 着色。</summary>
         public Texture2D CardWhite;
-        
+        /// <summary>纯白圆角描边：配合 GUI.color 得到任意颜色的圆角高亮框。</summary>
         public Texture2D OutlineAccent;
-        
+        /// <summary>细条轨道（进度条/滑块轨道）：border 很小，见 BarBox 的说明。</summary>
         public Texture2D BarTrack;
-        
+        /// <summary>纯白细条填充：配合 GUI.color 着色。</summary>
         public Texture2D BarFill;
-        
+        /// <summary>纯白实心圆：滑块 / 开关手柄（缩放绘制，保证是正圆）。</summary>
         public Texture2D KnobCircle;
-        
+        /// <summary>纯白径向辉光：配合 GUI.color 着色。</summary>
         public Texture2D GlowWhite;
         public Texture2D WaveBackground;
         public Texture2D AlarmGlow;
@@ -45,50 +54,53 @@ namespace CuStatsHud.UI
         public Texture2D Hairline;
         public Texture2D Overlay;
 
+        // ---------- 文本样式 ----------
         public GUIStyle Title;
         public GUIStyle Body;
         public GUIStyle Label;
         public GUIStyle Tiny;
         public GUIStyle Section;
         public GUIStyle ValueLarge;
-        
+        /// <summary>左对齐的大数值（波形区通道块用）。</summary>
         public GUIStyle ValueLargeLeft;
         public GUIStyle WaveLabel;
         public GUIStyle WaveValue;
         public GUIStyle AlarmText;
-        
+        /// <summary>居中白色文字（按钮/提示）。</summary>
         public GUIStyle Center;
-        
+        /// <summary>居中深色文字（强调底上的按钮）。</summary>
         public GUIStyle CenterAccent;
         public GUIStyle Right;
-        
+        /// <summary>强调底上的小字（深色）。</summary>
         public GUIStyle ChipOn;
-        
+        /// <summary>中性底上的小字（次亮）。</summary>
         public GUIStyle ChipIdle;
-        
+        /// <summary>右对齐的数值（颜色由调用方用富文本指定）。</summary>
         public GUIStyle ValueRight;
         public GUIStyle MateName;
-        
+        /// <summary>队友摘要（颜色由调用方用富文本指定）。</summary>
         public GUIStyle MateMeta;
-        
+        /// <summary>右上角小字（底栏/说明），右对齐。</summary>
         public GUIStyle TinyRight;
-        
+        /// <summary>分组标题右侧的说明文字。</summary>
         public GUIStyle SectionNote;
-        
+        /// <summary>队友卡片右上角的距离。</summary>
         public GUIStyle MateDistance;
-        
+        /// <summary>自动换行的说明文字（关于面板用）。</summary>
         public GUIStyle BodyWrap;
 
+        // ---------- 可复用绘制样式 ----------
+        /// <summary>圆角 9 宫格：绘制前设置 normal.background。</summary>
         public GUIStyle Box;
-        
+        /// <summary>面板专用 9 宫格（圆角更大）。</summary>
         public GUIStyle PanelBox;
-        
+        /// <summary>胶囊 9 宫格：绘制前设置 normal.background。</summary>
         public GUIStyle Pill;
-        
+        /// <summary>细条样式（进度条 / 滑块轨道）：border 只有 2px。</summary>
         public GUIStyle BarBox;
-        
+        /// <summary>完全透明的点击热区（文字由调用方另行绘制，避免双重绘制）。</summary>
         public GUIStyle Hit;
-        
+        /// <summary>可换背景的滚动条轨道/滑块。</summary>
         public GUIStyle Thumb;
 
         private readonly Font _font;
@@ -98,13 +110,15 @@ namespace CuStatsHud.UI
         {
             Theme = theme;
             _font = font;
-            
+            // 圆角下限也随皮肤变化：游戏 UI 风格要能真正画到接近直角
             _radius = Mathf.Max(Theme.Pxi(Theme.MinRadius), theme.Pxi(Theme.RadiusSize));
 
             BuildTextures();
             BuildTextStyles();
             BuildDrawStyles();
         }
+
+        // ---------------------------------------------------------------
 
         private void BuildTextures()
         {
@@ -121,12 +135,16 @@ namespace CuStatsHud.UI
                 new Color(Theme.Outline.r, Theme.Outline.g, Theme.Outline.b, 0.85f));
             Outline = TextureFactory.Rounded(size, r,
                 new Color(Theme.Outline.r, Theme.Outline.g, Theme.Outline.b, 0.75f));
-            
+            // 白色圆角描边：配合 GUI.color 着色，用于选中高亮等任意颜色的描边
             OutlineAccent = TextureFactory.RoundedOutline(size, r, Mathf.Max(1.5f, Theme.Px(1.5f)), Color.white);
 
+            // 细条专用：圆角半径固定 2px、border 也是 2px。
+            // 进度条只有 4px 高，若用胶囊纹理（border≈10）9 宫格的边框会被压扁成直角，
+            // 这正是「数值条看起来是方的」的原因。
             BarTrack = TextureFactory.Rounded(6, Theme.BarRadius, new Color(1f, 1f, 1f, 0.07f));
             BarFill = TextureFactory.Rounded(6, Theme.BarRadius, Color.white);
 
+            // 手柄用实心圆：尺寸随缩放变化，靠缩放绘制保持正圆
             KnobCircle = TextureFactory.Circle(32, Color.white);
 
             CardNormal = TextureFactory.Rounded(size, r, Theme.CardBg);
@@ -143,8 +161,7 @@ namespace CuStatsHud.UI
             PillWhite = TextureFactory.Capsule(pillW, pillH, Color.white);
             CardWhite = TextureFactory.Rounded(size, r, Color.white);
             GlowWhite = TextureFactory.Glow(96, Color.white);
-            
-            WaveBackground = TextureFactory.Rounded(size, r, new Color(0f, 0f, 0f, 0.08f));
+            WaveBackground = TextureFactory.Rounded(size, r, new Color(0f, 0f, 0f, 0.28f));
 
             AlarmGlow = TextureFactory.Glow(96, new Color(Theme.Critical.r, Theme.Critical.g, Theme.Critical.b, 0.45f));
             GridMinor = TextureFactory.Grid(Mathf.Max(3, Theme.Pxi(9)), Theme.GridMinor);
@@ -200,6 +217,7 @@ namespace CuStatsHud.UI
             Pill.normal.background = PillIdle;
             Pill.border = new RectOffset(pillBorder, pillBorder, pillBorder, pillBorder);
 
+            // 细条样式：border 只有 2px，4px 高的进度条也能画出圆头而不是被压成直角
             BarBox = new GUIStyle(Box);
             BarBox.normal.background = BarTrack;
             BarBox.border = new RectOffset(2, 2, 2, 2);
@@ -217,10 +235,9 @@ namespace CuStatsHud.UI
             Thumb.normal.background = PillAccent;
         }
 
-        public Texture2D BackgroundImage;
-        
-        public float BackgroundAlpha;
+        // ---------------------------------------------------------------
 
+        /// <summary>面板：1px 描边 + 圆角面板底（描边在面板外 1px，形成现代 UI 的轮廓感）。</summary>
         public void DrawPanel(Rect rect)
         {
             PanelBox.normal.background = PanelOutline;
@@ -228,16 +245,9 @@ namespace CuStatsHud.UI
 
             PanelBox.normal.background = Panel;
             GUI.Box(rect, GUIContent.none, PanelBox);
-
-            if (BackgroundImage != null && BackgroundAlpha > 0.002f)
-            {
-                Color old = GUI.color;
-                GUI.color = new Color(1f, 1f, 1f, BackgroundAlpha * old.a);
-                GUI.DrawTexture(rect, BackgroundImage, ScaleMode.ScaleAndCrop, true);
-                GUI.color = old;
-            }
         }
 
+        /// <summary>卡片/分块表面：1px 描边 + 圆角底。</summary>
         public void DrawSurface(Rect rect, Texture2D background)
         {
             Box.normal.background = Outline;
@@ -247,18 +257,21 @@ namespace CuStatsHud.UI
             GUI.Box(rect, GUIContent.none, Box);
         }
 
+        /// <summary>用当前 <see cref="Box"/> 画一个圆角底（会临时替换 background）。</summary>
         public void DrawBox(Rect rect, Texture2D background)
         {
             Box.normal.background = background != null ? background : CardNormal;
             GUI.Box(rect, GUIContent.none, Box);
         }
 
+        /// <summary>用当前 <see cref="Pill"/> 画一个胶囊底。</summary>
         public void DrawPill(Rect rect, Texture2D background)
         {
             Pill.normal.background = background != null ? background : PillIdle;
             GUI.Box(rect, GUIContent.none, Pill);
         }
 
+        /// <summary>画细条（进度条轨道 / 填充）：用 2px 圆角，避免细条被压成直角。</summary>
         public void DrawBar(Rect rect, Texture2D background)
         {
             if (rect.width <= 0f || rect.height <= 0f) return;
@@ -266,6 +279,7 @@ namespace CuStatsHud.UI
             GUI.Box(rect, GUIContent.none, BarBox);
         }
 
+        /// <summary>平铺网格。</summary>
         public void DrawGrid(Rect rect, Texture2D tile, int cellPixels)
         {
             if (tile == null || cellPixels <= 0 || rect.width <= 0f || rect.height <= 0f) return;
@@ -273,16 +287,20 @@ namespace CuStatsHud.UI
                 new Rect(0f, 0f, rect.width / cellPixels, rect.height / cellPixels));
         }
 
+        /// <summary>1px 分隔线。</summary>
         public void DrawHairline(Rect rect)
         {
             if (rect.height <= 0f) return;
             GUI.DrawTexture(rect, Hairline);
         }
 
+        /// <summary>画一圈圆角描边（编辑态高亮、选中框等）。</summary>
         public void DrawOutline(Rect rect, Color color)
         {
             if (rect.width <= 3f || rect.height <= 3f) return;
 
+            // 用圆角描边纹理而不是四条直线：直线拼出来是直角框，
+            // 套在圆角卡片上会明显不匹配。
             Color old = GUI.color;
             GUI.color = Theme.Fade(color, old.a);
             Box.normal.background = OutlineAccent;
@@ -320,6 +338,7 @@ namespace CuStatsHud.UI
             TextureFactory.Destroy(ref Overlay);
         }
 
+        /// <summary>取分级对应的卡片底纹。</summary>
         public Texture2D CardFor(Core.Severity severity)
         {
             switch (severity)

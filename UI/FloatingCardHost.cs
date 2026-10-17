@@ -5,31 +5,49 @@ using UnityEngine;
 
 namespace CuStatsHud.UI
 {
-    
+    /// <summary>
+    /// 浮动组件卡的运行时宿主。
+    ///
+    /// 交互模型：**不占用任何游戏按键**。摆放通过设置页的「组件卡摆放」界面进行——
+    /// 该界面打开时屏幕变成画布（方格 + 边界），右栏组件库直接显示**组件卡真实的样子**，
+    /// 拖到屏幕上即生成；左栏调整该卡的不透明度、大小、是否按方格摆放；
+    /// 「保存」写盘，「取消」完全还原。
+    ///
+    /// 显示开关：由快捷键（Keys/FloatToggle）或设置页开关控制，与摆放界面无关。
+    ///
+    /// 坐标与边界：位置以屏幕坐标保存，每帧夹进屏幕内（含换分辨率后自我修正）；
+    /// 未开网格时做屏幕边缘吸附，开启「按方格摆放」后位置严格遵守网格。
+    /// </summary>
     internal sealed class FloatingCardHost
     {
         private readonly List<FloatCard> _cards = new List<FloatCard>(FloatCardRules.MaxCards);
         private readonly List<Rect> _rects = new List<Rect>(FloatCardRules.MaxCards);
-        
+        /// <summary>进入摆放界面时的布局快照，「取消」用它还原。</summary>
         private readonly List<FloatCard> _backup = new List<FloatCard>(FloatCardRules.MaxCards);
 
         private bool _loaded;
         private int _dragIndex = -1;
         private Vector2 _dragOffset;
-        
+        /// <summary>是否正在拖动某张组件卡（自己维护，不用 hotControl，见 DrawOne 的说明）。</summary>
         private bool _dragging;
         private int _hoverIndex = -1;
         private bool _dirty;
         private float _dirtyAt;
 
+        // ---------- 摆放界面会话 ----------
+        /// <summary>摆放界面是否打开。</summary>
         public bool Editing;
-        
+        /// <summary>左侧属性栏当前选中的组件卡；-1 表示未选中。</summary>
         public int Selected = -1;
-        
+        /// <summary>正在从组件库拖出的源（<see cref="DragSourceKey"/> 为空表示没有）。</summary>
         public string DragSourceKey;
         public FloatCardKind DragSourceKind;
         public Vector2 DragPoint;
 
+        /// <summary>
+        /// 摆放界面左右栏的矩形。落在其中的鼠标事件不交给画布上的组件卡——
+        /// IMGUI 是先绘制的先响应，若不作禁区，栏位下方的组件卡会抢走栏上的点击。
+        /// </summary>
         public readonly List<Rect> PaneAreas = new List<Rect>(2);
 
         public int Count
@@ -47,11 +65,17 @@ namespace CuStatsHud.UI
             get { return !string.IsNullOrEmpty(DragSourceKey); }
         }
 
+        /// <summary>摆放方格的边长（像素）。由设置里的「网格密度」决定。</summary>
         public static float GridCell(HudState s)
         {
             return Mathf.Clamp(s.Config.GridSize.Value, 6f, 200f);
         }
 
+        // ---------------------------------------------------------------
+        // 生命周期
+        // ---------------------------------------------------------------
+
+        /// <summary>从配置载入（只做一次）。</summary>
         public void EnsureLoaded(PluginConfig config)
         {
             if (_loaded) return;
@@ -59,6 +83,10 @@ namespace CuStatsHud.UI
             FloatCardRules.Deserialize(config.FloatCards.Value, _cards);
         }
 
+        /// <summary>
+        /// 重算所有组件卡的屏幕矩形。每帧绘制前调用一次，
+        /// 保证 Layout 与 Repaint 两次绘制用的是同一套矩形（否则拾取与视觉会错位）。
+        /// </summary>
         public void SyncRects(HudState s)
         {
             _rects.Clear();
@@ -72,6 +100,7 @@ namespace CuStatsHud.UI
                 float y = FloatCardRules.ClampAxis(card.Y, size.y, Screen.height);
                 _rects.Add(new Rect(x, y, size.x, size.y));
 
+                // 分辨率变小等情况下坐标会被夹回来，这里写回，避免“越拖越偏”
                 if (Mathf.Abs(x - card.X) > 0.5f || Mathf.Abs(y - card.Y) > 0.5f)
                 {
                     card.X = x;
@@ -82,9 +111,10 @@ namespace CuStatsHud.UI
             }
         }
 
+        /// <summary>落盘（延时）。摆放界面未点保存前一律不落盘。</summary>
         public void Flush(PluginConfig config, float now, float delay)
         {
-            if (Editing) return;   
+            if (Editing) return;   // 未保存前不写配置，保证「取消」是彻底回滚
             if (!_dirty || now - _dirtyAt < delay) return;
             SaveNow(config);
         }
@@ -108,6 +138,10 @@ namespace CuStatsHud.UI
             Editing = false;
         }
 
+        // ---------------------------------------------------------------
+        // 摆放界面会话
+        // ---------------------------------------------------------------
+
         public void BeginEditing()
         {
             if (Editing) return;
@@ -119,6 +153,7 @@ namespace CuStatsHud.UI
             _backup.AddRange(_cards);
         }
 
+        /// <summary>保存并退出摆放界面。</summary>
         public void CommitEditing(PluginConfig config)
         {
             if (!Editing) return;
@@ -130,6 +165,7 @@ namespace CuStatsHud.UI
             SaveNow(config);
         }
 
+        /// <summary>取消并还原到进入摆放界面时的布局。</summary>
         public void CancelEditing()
         {
             if (!Editing) return;
@@ -144,6 +180,11 @@ namespace CuStatsHud.UI
             _rects.Clear();
         }
 
+        // ---------------------------------------------------------------
+        // 增删改
+        // ---------------------------------------------------------------
+
+        /// <summary>从组件库拖出：<paramref name="dropPoint"/> 为松手位置（作为卡片中心）。</summary>
         public void AddFromLibrary(FloatCardKind kind, string key, Vector2 dropPoint, HudState s)
         {
             if (string.IsNullOrEmpty(key)) return;
@@ -155,7 +196,7 @@ namespace CuStatsHud.UI
             fresh.Y = 0f;
             fresh.Opacity = FloatCardRules.MaxOpacity;
             fresh.Scale = 1f;
-            fresh.GridSnap = true;      
+            fresh.GridSnap = true;      // 新生成的组件卡默认按方格摆放
 
             Vector2 size = SizeOf(fresh, s);
             float snap = s.Theme.Px(FloatCardRules.SnapDistance);
@@ -166,9 +207,11 @@ namespace CuStatsHud.UI
             FloatCardRules.DropAt(dropPoint.x, dropPoint.y, size.x, size.y, Screen.width, Screen.height, snap,
                 out dropX, out dropY);
 
+            // 默认吸网格，所以落点也直接对齐到网格
             float x = FloatCardRules.PlaceAxis(dropX, size.x, Screen.width, snap, cell);
             float y = FloatCardRules.PlaceAxis(dropY, size.y, Screen.height, snap, cell);
 
+            // 同一来源只保留一张：已存在就挪到这次放下的位置
             for (int i = 0; i < _cards.Count; i++)
             {
                 if (_cards[i].Kind != kind || !string.Equals(_cards[i].Key, key, StringComparison.Ordinal)) continue;
@@ -208,6 +251,7 @@ namespace CuStatsHud.UI
             MarkDirty(Time.unscaledTime);
         }
 
+        /// <summary>调整该组件卡的尺寸倍率（内容一起等比缩放）。</summary>
         public void SetScale(int index, float value)
         {
             if (index < 0 || index >= _cards.Count) return;
@@ -215,10 +259,11 @@ namespace CuStatsHud.UI
             FloatCard card = _cards[index];
             card.Scale = FloatCardRules.ClampScale(value);
             _cards[index] = card;
-            _rects.Clear();   
+            _rects.Clear();   // 尺寸变了，矩形需要重算
             MarkDirty(Time.unscaledTime);
         }
 
+        /// <summary>切换「按方格摆放」；开启时立刻把当前位置对齐到最近的格点。</summary>
         public void SetGridSnap(int index, bool value, HudState s)
         {
             if (index < 0 || index >= _cards.Count) return;
@@ -261,6 +306,11 @@ namespace CuStatsHud.UI
             s.Note("已清空全部组件卡");
         }
 
+        // ---------------------------------------------------------------
+        // 尺寸与矩形
+        // ---------------------------------------------------------------
+
+        /// <summary>该卡片的自然尺寸（不含用户的尺寸倍率）。</summary>
         public static Vector2 BaseSizeOf(FloatCardKind kind, HudState s)
         {
             Theme th = s.Theme;
@@ -277,6 +327,7 @@ namespace CuStatsHud.UI
             }
         }
 
+        /// <summary>该卡片的实际尺寸 = 自然尺寸 × 自己的倍率。</summary>
         public static Vector2 SizeOf(FloatCard card, HudState s)
         {
             Vector2 natural = BaseSizeOf(card.Kind, s);
@@ -284,6 +335,7 @@ namespace CuStatsHud.UI
             return new Vector2(natural.x * scale, natural.y * scale);
         }
 
+        /// <summary>某个屏幕坐标是否落在任一组件卡上。</summary>
         public bool Covers(Vector2 point)
         {
             for (int i = 0; i < _rects.Count; i++)
@@ -298,6 +350,7 @@ namespace CuStatsHud.UI
             return index >= 0 && index < _rects.Count ? _rects[index] : new Rect(0f, 0f, 0f, 0f);
         }
 
+        /// <summary>该点是否落在摆放界面的栏位上。</summary>
         public bool InPane(Vector2 point)
         {
             for (int i = 0; i < PaneAreas.Count; i++)
@@ -307,11 +360,18 @@ namespace CuStatsHud.UI
             return false;
         }
 
+        // ---------------------------------------------------------------
+        // 绘制
+        // ---------------------------------------------------------------
+
+        /// <summary>绘制全部组件卡；<paramref name="interactive"/> = 摆放界面打开中（可拖动/可选中）。</summary>
         public void Draw(HudState s, bool interactive)
         {
             if (s.Theme == null || s.Styles == null) return;
             if (_cards.Count == 0) return;
 
+            // 未加载存档 / 暂停界面：不绘制也不响应鼠标
+            // （摆放界面里始终可见，否则没法编辑）
             float visibility = interactive ? 1f : s.GamePausedVisibility;
             if (visibility <= 0.01f) return;
 
@@ -321,6 +381,7 @@ namespace CuStatsHud.UI
             Event e = Event.current;
             Vector2 mouse = e != null ? e.mousePosition : new Vector2(-1f, -1f);
 
+            // 鼠标抬起统一收尾：拖动可能结束在任何位置（甚至卡片之外）
             if (e != null && e.type == EventType.MouseUp && _dragging)
             {
                 _dragging = false;
@@ -335,7 +396,7 @@ namespace CuStatsHud.UI
                 {
                     if (!_rects[i].Contains(mouse)) continue;
                     if (InPane(mouse)) continue;
-                    _hoverIndex = i;   
+                    _hoverIndex = i;   // 后画的在上层，取最后命中的
                 }
             }
 
@@ -345,6 +406,7 @@ namespace CuStatsHud.UI
                 DrawOne(s, snap, i, interactive, mouse, visibility);
             }
 
+            // 正在拖动的卡片最后画，保证压在最上层
             if (interactive && _dragIndex >= 0 && _dragIndex < _cards.Count)
             {
                 DrawOne(s, snap, _dragIndex, interactive, mouse, visibility);
@@ -361,6 +423,7 @@ namespace CuStatsHud.UI
             HudStyles st = s.Styles;
             Theme th = s.Theme;
 
+            // 组件卡自己的透明度与尺寸：整卡（底纹、色块、图标、文字）一起缩放与淡出
             float alpha = Mathf.Clamp01(FloatCardRules.ClampOpacity(card.Opacity) * visibility);
             DrawCardVisual(s, snap, card, rect, alpha, st);
 
@@ -371,6 +434,7 @@ namespace CuStatsHud.UI
                 st.DrawOutline(rect, selected ? Theme.Accent : Theme.WithAlpha(Theme.Accent, 0.55f));
             }
 
+            // 摆放界面里每张卡右上角都有 ✕（左栏也有删除按钮）
             float closeSize = th.CloseButtonSize();
             Rect closeRect = new Rect(rect.xMax - closeSize - th.Px(3f), rect.y + th.Px(3f), closeSize, closeSize);
 
@@ -384,13 +448,17 @@ namespace CuStatsHud.UI
             Event e = Event.current;
             if (e == null) return;
 
+            // 拖动状态完全由自己的标志维护，**不用 GUIUtility.hotControl**：
+            // 拖动中的卡片会被移到最后绘制，绘制顺序一变、GetControlID 分配到的 id 就变了，
+            // 于是 hotControl == id 的校验必然失败——表现就是"放了第二张之后第一张拖不动"。
+            // 鼠标抬起在 Draw 里统一收尾（无论在哪张卡上松开）。
             switch (e.type)
             {
                 case EventType.MouseDown:
                     if (InPane(e.mousePosition)) break;
                     if (rect.Contains(e.mousePosition) && !closeRect.Contains(e.mousePosition))
                     {
-                        Selected = index;                       
+                        Selected = index;                       // 点一下即选中（左栏显示属性）
                         _dragIndex = index;
                         _dragOffset = e.mousePosition - new Vector2(rect.x, rect.y);
                         _dragging = true;
@@ -416,6 +484,7 @@ namespace CuStatsHud.UI
             Rect rect = _rects[index];
             FloatCard card = _cards[index];
 
+            // 按方格摆放时严格遵守网格（不做边缘吸附）；否则夹进屏幕并吸附边缘
             float grid = card.GridSnap ? GridCell(s) : 0f;
             float snap = th.Px(FloatCardRules.SnapDistance);
 
@@ -425,6 +494,14 @@ namespace CuStatsHud.UI
             MarkDirty(Time.unscaledTime);
         }
 
+        /// <summary>
+        /// 按自己的倍率绘制一张组件卡：内容用主面板的同一套渲染，
+        /// 因此组件卡与原件完全一致（含数据实时性）。
+        ///
+        /// 缩放通过 <see cref="Theme.UiScale"/> 完成（所有尺寸入口整体缩放），
+        /// **不使用 GUI.matrix** —— 矩阵缩放与滚动区的 BeginGroup 裁剪会互相干扰，
+        /// 表现为内容整个画不出来、描选框与卡片错位。这样绘制坐标始终是真实屏幕坐标。
+        /// </summary>
         private static void DrawCardVisual(HudState s, BodySnapshot snap, FloatCard card, Rect rect,
             float alpha, HudStyles st)
         {
@@ -454,6 +531,10 @@ namespace CuStatsHud.UI
             }
         }
 
+        /// <summary>
+        /// 组件库里的预览：显示组件卡**真实的样子**（等比缩放，最多到自然尺寸，不放大）。
+        /// 同样走 <see cref="Theme.UiScale"/>，在滚动区的 group 内可以正常工作。
+        /// </summary>
         public static void DrawPreview(HudState s, FloatCardKind kind, string key, Rect area, HudStyles st)
         {
             if (s.Theme == null || area.width < 8f || area.height < 8f) return;
@@ -495,6 +576,7 @@ namespace CuStatsHud.UI
             }
         }
 
+        /// <summary>拖拽幽灵：跟随鼠标的半透明预览（位置已按当前摆放规则吸附）。</summary>
         public void DrawDragGhost(HudState s)
         {
             if (!HasDragSource || s.Theme == null) return;
@@ -559,6 +641,10 @@ namespace CuStatsHud.UI
                 "<color=" + Theme.HexMuted + ">" + key + "：暂无数据</color>", st.Body);
         }
 
+        // ---------------------------------------------------------------
+        // 数据查找（组件卡按 key 从快照里取，因此始终是实时数据）
+        // ---------------------------------------------------------------
+
         private static VitalReading? FindVital(BodySnapshot snap, string key)
         {
             if (snap == null || !snap.Valid) return null;
@@ -589,9 +675,15 @@ namespace CuStatsHud.UI
             return null;
         }
 
+        // ---------------------------------------------------------------
+        // 摆放界面的画布提示
+        // ---------------------------------------------------------------
+
+        /// <summary>摆放界面的操作提示。</summary>
         public const string EditorHintText =
             "鼠标靠近屏幕左右边缘展开两侧面板（离开自动收起）· 从组件库拖出组件卡摆放 · 选中后左栏调透明度 / 大小 / 方格 · Delete 删除选中 · Esc 保存并关闭";
 
+        /// <summary>画布背景层：全屏方格 + 屏幕边界。</summary>
         public static void DrawGridOverlay(HudState s)
         {
             if (s.Theme == null || s.Styles == null) return;
@@ -609,6 +701,7 @@ namespace CuStatsHud.UI
             }
             GUI.color = old;
 
+            // 屏幕边界：直观说明“拖不出去”
             Color border = Theme.WithAlpha(Theme.Accent, 0.5f);
             Widgets.Fill(new Rect(0f, 0f, Screen.width, 2f), border);
             Widgets.Fill(new Rect(0f, Screen.height - 2f, Screen.width, 2f), border);
@@ -616,6 +709,7 @@ namespace CuStatsHud.UI
             Widgets.Fill(new Rect(Screen.width - 2f, 0f, 2f, Screen.height), border);
         }
 
+        /// <summary>底部提示条（画在最上层，避免被抽屉盖住）。</summary>
         public static void DrawHintBar(HudState s)
         {
             if (s.Theme == null || s.Styles == null) return;
@@ -623,6 +717,7 @@ namespace CuStatsHud.UI
             Theme th = s.Theme;
             HudStyles st = s.Styles;
 
+            // 不贴屏幕边缘：留出边距做成圆角条，与其它 UI 元素保持一致的圆角语言
             float margin = th.Px(12f);
             float hintH = th.SmallLine() + th.Px(10f);
             Rect hint = new Rect(margin, Screen.height - hintH - margin,

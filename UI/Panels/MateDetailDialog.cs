@@ -4,7 +4,14 @@ using UnityEngine;
 
 namespace CuStatsHud.UI.Panels
 {
-    
+    /// <summary>
+    /// 队友详情窗口（模态）：
+    /// 顶部是身份（圆形头像 / 名字 / 距离）+ 当前状态条，下面是该队友的**完整**状态——
+    /// 与本地玩家页面复用同一套渲染代码，所以四个生理分组的全部体征、
+    /// 逐条肢体的皮肤/肌肉/疼痛/感染/出血/弹片等内容项完全一致。
+    ///
+    /// 交互：右上角 ✕、点击遮罩、Esc 关闭；内容可滚轮滚动。
+    /// </summary>
     internal static class MateDetailDialog
     {
         private static string MutedHex { get { return Theme.HexMuted; } }
@@ -52,6 +59,7 @@ namespace CuStatsHud.UI.Panels
                 float headerH = DrawHeader(s, mate, new Rect(pad, pad, innerWidth,
                     Mathf.Max(th.AvatarSize(), th.LabelLine() + th.SmallLine())), st, th);
 
+                // 状态条：与主面板同一套三态配色/闪烁
                 float bannerH = th.AlarmHeight();
                 Rect banner = new Rect(pad, pad + headerH + th.Px(6f), innerWidth, bannerH);
                 string statusText = detail != null && !string.IsNullOrEmpty(detail.AlertText)
@@ -80,6 +88,7 @@ namespace CuStatsHud.UI.Panels
             }
         }
 
+        /// <summary>身份头部：头像、名字、距离、关闭按钮。返回头部高度。</summary>
         private static float DrawHeader(HudState s, MateReading mate, Rect rect, HudStyles st, Theme th)
         {
             float avatarSize = th.AvatarSize();
@@ -101,6 +110,7 @@ namespace CuStatsHud.UI.Panels
             float line2 = th.SmallLine();
             float textWidth = Mathf.Max(20f, closeRect.x - textX - th.Px(8f));
 
+            // 头部只放身份信息；体征数值一律在下面的卡片里，避免重复
             GUI.Label(new Rect(textX, rect.y, textWidth, line1), mate.Name, st.Title);
 
             string meta = "距离 " + (mate.Distance >= 0f ? VitalRules.Num1(mate.Distance) + " m" : "未知");
@@ -116,6 +126,7 @@ namespace CuStatsHud.UI.Panels
             return Mathf.Max(avatarSize, line1 + line2);
         }
 
+        /// <summary>内容区：体征 + 肢体，复用主面板的同一套渲染方法。</summary>
         private static void DrawContent(HudState s, BodySnapshot detail, Rect area, HudStyles st, Theme th)
         {
             GUI.BeginGroup(area);
@@ -137,6 +148,7 @@ namespace CuStatsHud.UI.Panels
                     return;
                 }
 
+                // 详情页没有波形区常显，因此 channelsCovered 传 false：列出全部指标
                 float afterVitals = VitalsPanel.Draw(s, detail, panelArea, th.Px(2f), offset, false);
                 float total = LimbsPanel.Draw(s, detail, panelArea, afterVitals + th.Px(12f), offset);
 

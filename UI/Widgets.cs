@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace CuStatsHud.UI
 {
-    
+    /// <summary>竖向排布游标，让面板代码像写清单一样自上而下堆叠。</summary>
     internal struct Layout
     {
         public float X;
@@ -18,6 +18,7 @@ namespace CuStatsHud.UI
             Width = width;
         }
 
+        /// <summary>占用一行，返回其矩形并下移游标。</summary>
         public Rect Take(float height)
         {
             Rect rect = new Rect(X, Y, Width, height);
@@ -25,6 +26,7 @@ namespace CuStatsHud.UI
             return rect;
         }
 
+        /// <summary>占用一行并追加额外间距。</summary>
         public Rect Take(float height, float gap)
         {
             Rect rect = new Rect(X, Y, Width, height);
@@ -37,6 +39,7 @@ namespace CuStatsHud.UI
             Y += height;
         }
 
+        /// <summary>左右分栏，返回左列并输出右列。</summary>
         public static Rect SplitColumns(Rect row, float gutter, out Rect right)
         {
             float w = Mathf.Max(0f, (row.width - gutter) * 0.5f);
@@ -46,26 +49,49 @@ namespace CuStatsHud.UI
         }
     }
 
+    /// <summary>一个标签页的滚动状态。</summary>
     internal sealed class ScrollState
     {
         public float Offset;
         public bool Dragging;
-        
+        /// <summary>上一次绘制得到的实际内容高度（下一帧用于计算滚动范围）。</summary>
         public float ContentHeight;
     }
 
+    /// <summary>
+    /// 自绘控件集合。所有控件都基于显式 Rect，布局完全确定，
+    /// 不受 GUILayout 隐式测量的影响，这样监护仪式对齐才不会漂。
+    ///
+    /// 两条硬性约定：
+    ///   1) 纯色块一律「白色底纹 + GUI.color 着色」，避免有色底纹再乘颜色导致偏色；
+    ///   2) **绝不就地修改共享 GUIStyle**（需要变色时用富文本 &lt;color&gt;），
+    ///      否则不同调用点之间会互相串色。
+    /// 行内所有竖向分带都由 <see cref="Theme"/> 的字体度量推导，保证任意字号/缩放下不重叠。
+    /// </summary>
     internal static class Widgets
     {
-        
+        // 走属性而不是 const：配色随皮肤变化，const 在编译期就固化了
         private static string MutedHex { get { return Theme.HexMuted; } }
         private static string SecondaryHex { get { return Theme.HexSecondary; } }
 
+        /// <summary>
+        /// 给文字套上 rich text 字号，用于「整卡等比缩放」（<see cref="Theme.UiScale"/>）。
+        ///
+        /// GUIStyle 的字号是构建时固化的、运行时改不了（改了会污染共享样式），
+        /// 所以缩放后的字号只能由 rich text 的 size 标签覆盖。
+        /// UiScale = 1 时原样返回，主面板的绘制完全不受影响。
+        /// </summary>
         private static string Fit(string text, Theme th, int fontLevel)
         {
             if (th.UiScale >= 0.999f && th.UiScale <= 1.001f) return text;
             return "<size=" + th.Font(fontLevel) + ">" + text + "</size>";
         }
 
+        /// <summary>
+        /// 用纯色填充矩形。
+        /// 颜色会乘上当前 <see cref="GUI.color"/> 的 alpha —— IMGUI 的 GUI.color 是**直接赋值**而不是相乘，
+        /// 若这里直接覆盖，浮动副本的整卡透明度就会在填充块上失效。
+        /// </summary>
         public static void Fill(Rect rect, Color color)
         {
             Color old = GUI.color;
@@ -74,6 +100,11 @@ namespace CuStatsHud.UI
             GUI.color = old;
         }
 
+        // ---------------------------------------------------------------
+        // 基础控件
+        // ---------------------------------------------------------------
+
+        /// <summary>胶囊分段按钮（标签页）。</summary>
         public static bool Segment(Rect rect, string label, bool active, HudStyles styles)
         {
             bool hover = rect.Contains(Event.current.mousePosition);
@@ -94,6 +125,7 @@ namespace CuStatsHud.UI
             return GUI.Button(rect, label, styles.Hit);
         }
 
+        /// <summary>带图标的胶囊分段按钮（标签页）：图标 + 文字整体居中。</summary>
         public static bool SegmentWithIcon(Rect rect, Texture2D icon, string label, bool active, HudStyles styles)
         {
             bool hover = rect.Contains(Event.current.mousePosition);
@@ -130,6 +162,7 @@ namespace CuStatsHud.UI
             return GUI.Button(rect, label, styles.Hit);
         }
 
+        /// <summary>圆角按钮。</summary>
         public static bool Button(Rect rect, string label, bool primary, HudStyles styles)
         {
             bool hover = rect.Contains(Event.current.mousePosition);
@@ -150,6 +183,7 @@ namespace CuStatsHud.UI
             return GUI.Button(rect, label + (primary ? "|p" : "|s"), styles.Hit);
         }
 
+        /// <summary>开关行。返回新值。</summary>
         public static bool Toggle(Rect rect, bool value, string label, HudStyles styles)
         {
             styles.DrawBox(rect, styles.CardSunken);
@@ -173,7 +207,7 @@ namespace CuStatsHud.UI
             float knobX = value ? track.xMax - knob - 1f : track.x + 1f;
             Color knobOld = GUI.color;
             GUI.color = value ? Color.white : new Color(0.78f, 0.81f, 0.85f, 0.95f);
-            
+            // 手柄必须是正圆：胶囊纹理的 border 一旦超过尺寸一半就会被压成直角方块
             GUI.DrawTexture(new Rect(knobX, track.y + 1f, knob, knob), styles.KnobCircle);
             GUI.color = knobOld;
 
@@ -183,9 +217,10 @@ namespace CuStatsHud.UI
             return GUI.Button(rect, label + (value ? "|on" : "|off"), styles.Hit) ? !value : value;
         }
 
+        /// <summary>滑块。点击轨道即定位，拖动连续调整。返回新值。</summary>
         public static float Slider(Rect rect, float value, float min, float max, HudStyles styles)
         {
-            
+            // 模态窗口打开时主面板整体禁用：手动处理的控件也必须跟着失效
             if (!GUI.enabled) return value;
 
             float trackH = Mathf.Max(4f, rect.height * 0.30f);
@@ -208,7 +243,8 @@ namespace CuStatsHud.UI
                 Mathf.Max(track.x, track.xMax - knobSize));
             Color knobOld = GUI.color;
             GUI.color = Color.white;
-            
+            // 手柄必须是正圆：滑块行高 16px 时手柄约 10×16，而胶囊纹理的 border 是 10，
+            // 会被 9 宫格压成直角方块。圆形纹理 + 缩放绘制就没有这个问题。
             GUI.DrawTexture(new Rect(knobX, rect.y + (rect.height - knobSize) * 0.5f, knobSize, knobSize),
                 styles.KnobCircle);
             GUI.color = knobOld;
@@ -221,7 +257,7 @@ namespace CuStatsHud.UI
                     if (rect.Contains(e.mousePosition))
                     {
                         GUIUtility.hotControl = id;
-                        
+                        // 单击轨道也要立刻定位，否则用户会以为滑块坏了
                         value = ValueAt(e.mousePosition.x, track, min, max);
                         e.Use();
                     }
@@ -251,6 +287,7 @@ namespace CuStatsHud.UI
             return min + local * (max - min);
         }
 
+        /// <summary>键位捕获按钮。返回是否被点击（点击后由调用方开启捕获状态）。</summary>
         public static bool KeybindButton(Rect rect, string current, bool capturing, HudStyles styles)
         {
             bool hover = rect.Contains(Event.current.mousePosition);
@@ -272,13 +309,22 @@ namespace CuStatsHud.UI
             return GUI.Button(rect, "keybind:" + current + (capturing ? "|cap" : ""), styles.Hit);
         }
 
+        // ---------------------------------------------------------------
+        // 监护仪卡片
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// 主要生命体征卡片。竖向分带：
+        /// [图标 + 名称 | 参考范围] / [大数值 + 单位] / [范围条]，
+        /// 总高度由 <c>Theme.VitalCardHeight()</c> 保证刚好容纳。
+        /// </summary>
         public static void VitalCard(Rect rect, VitalReading reading, HudStyles styles, IconProvider icons, bool showLimits)
         {
             Theme th = styles.Theme;
             styles.DrawSurface(rect, styles.CardFor(reading.Severity));
 
             float pad = th.Px(7f);
-            
+            // 图标隐藏时（关闭 emoji）不留空位，文字左移填补
             Texture2D icon = icons.Get(reading.Icon, IconTint(reading.Severity));
             float iconSize = icon != null ? Mathf.Max(th.Px(14f), th.Font(1) * 1.2f) : 0f;
             float iconGap = icon != null ? th.Px(6f) : 0f;
@@ -325,13 +371,14 @@ namespace CuStatsHud.UI
             }
         }
 
+        /// <summary>紧凑单行：图标 + 名称 + 参考范围 + 数值。</summary>
         public static void CompactRow(Rect rect, VitalReading reading, bool striped, HudStyles styles, IconProvider icons, bool showLimits)
         {
             Theme th = styles.Theme;
             if (striped) styles.DrawBox(rect, styles.CardSunken);
 
             float pad = th.Px(5f);
-            
+            // 图标隐藏时不留空位
             Texture2D icon = icons.Get(reading.Icon, IconTint(reading.Severity));
             float iconSize = icon != null ? Mathf.Max(11f, rect.height * 0.62f) : 0f;
             float iconGap = icon != null ? th.Px(5f) : 0f;
@@ -363,6 +410,7 @@ namespace CuStatsHud.UI
             GUI.Label(new Rect(rect.xMax - pad - valueWidth, rect.y, valueWidth, rect.height), value, styles.ValueRight);
         }
 
+        /// <summary>分组小标题：左标题 + 右说明 + 一条剩余宽度的分隔线。</summary>
         public static void SectionHeader(Rect rect, string title, string note, HudStyles styles)
         {
             GUI.Label(rect, title, styles.Section);
@@ -383,9 +431,11 @@ namespace CuStatsHud.UI
             }
         }
 
+        /// <summary>横向进度/范围条。</summary>
         public static void Bar(Rect rect, float t, Color color, HudStyles styles)
         {
-            
+            // 用细条样式（2px 圆角）而不是胶囊：进度条只有 4px 高，
+            // 胶囊纹理的 border≈10 会被 9 宫格压扁成直角，看起来就是「方角的数值条」。
             styles.DrawBar(rect, styles.BarTrack);
 
             float clamped = Mathf.Clamp01(t);
@@ -398,6 +448,7 @@ namespace CuStatsHud.UI
             GUI.color = old;
         }
 
+        /// <summary>分级徽章。</summary>
         public static void Badge(Rect rect, Severity severity, string text, HudStyles styles)
         {
             Color old = GUI.color;
@@ -408,6 +459,9 @@ namespace CuStatsHud.UI
             GUI.Label(rect, Fit(text, styles.Theme, 2), styles.ChipOn);
         }
 
+        /// <summary>
+        /// 右上角关闭按钮：悬停时红色高亮，图标为程序化绘制的 ✕（不依赖字体，避免字形问题）。
+        /// </summary>
         public static bool CloseButton(Rect rect, HudStyles styles, IconProvider icons)
         {
             bool hover = rect.Contains(Event.current.mousePosition);
@@ -420,6 +474,7 @@ namespace CuStatsHud.UI
                 GUI.color = old;
             }
 
+            // 功能图标：走程序化图标，不受「显示 emoji」开关影响，否则关掉 emoji 后 ✕ 会消失
             Texture2D icon = icons != null
                 ? icons.GetProcedural("close", hover ? Theme.TextOnAccent : Theme.TextSecondary)
                 : null;
@@ -433,6 +488,11 @@ namespace CuStatsHud.UI
             return GUI.Button(rect, "close", styles.Hit);
         }
 
+        /// <summary>
+        /// 状态条（原告警横幅）：始终显示当前角色状态。
+        /// 正常=绿色常亮，非致命问题=黄色闪烁，致命=红色闪烁。
+        /// 只显示状态本身，不列举指标名（指标名在下面的卡片里，避免重复）。
+        /// </summary>
         public static void StatusBanner(Rect rect, Severity severity, string text, bool flash, float pulse,
             HudStyles styles, Texture2D alarmIcon)
         {
@@ -447,6 +507,7 @@ namespace CuStatsHud.UI
             else if (severity == Severity.Unknown) background = styles.CardSunken;
             else background = styles.CardPositive;
 
+            // 闪烁：致命闪得更深，非致命闪烁更柔
             float alpha = 1f;
             if (flash)
             {
@@ -465,6 +526,7 @@ namespace CuStatsHud.UI
             }
             GUI.color = old;
 
+            // 左侧状态色条：一眼看出当前档位
             Fill(new Rect(rect.x + 1f, rect.y + styles.Theme.Px(3f),
                 Mathf.Max(2f, styles.Theme.Px(3f)), rect.height - styles.Theme.Px(6f)),
                 Theme.WithAlpha(color, 0.95f));
@@ -482,6 +544,13 @@ namespace CuStatsHud.UI
                 "<color=" + Theme.SeverityHex(severity) + ">" + text + "</color>", styles.AlarmText);
         }
 
+        /// <summary>
+        /// 血氧浓度条。
+        ///
+        /// 血氧是「浓度」而不是节律，用波形反而看不出数值含义，
+        /// 所以这里用一条带 90% 危险阈值的水平浓度条：填充长度 = 血氧饱和度，
+        /// 阈值以下区域有淡红底，低于阈值时填充色转为琥珀/红。
+        /// </summary>
         public static void Spo2Gauge(Rect rect, bool valid, float spo2, HudStyles styles)
         {
             Theme th = styles.Theme;
@@ -505,6 +574,7 @@ namespace CuStatsHud.UI
             float innerW = Mathf.Max(6f, track.width - th.Px(4f));
             float innerH = Mathf.Max(3f, track.height - th.Px(4f));
 
+            // 危险区（阈值以下）淡红底：填得越满，露出的红底越少
             Color old = GUI.color;
             GUI.color = Theme.WithAlpha(Theme.Critical, 0.13f);
             styles.DrawPill(new Rect(innerX, track.y + th.Px(2f), innerW * Threshold, innerH), styles.PillWhite);
@@ -523,6 +593,7 @@ namespace CuStatsHud.UI
                 GUI.color = old;
             }
 
+            // 90% 危险阈值刻度
             float tickX = innerX + innerW * Threshold;
             Fill(new Rect(tickX, track.y + th.Px(3f), Mathf.Max(1f, th.Px(1.5f)), track.height - th.Px(6f)),
                 Theme.WithAlpha(Theme.Warning, 0.6f));
@@ -532,6 +603,7 @@ namespace CuStatsHud.UI
                 GUI.Label(track, "<color=" + MutedHex + ">无信号</color>", styles.Center);
             }
 
+            // 刻度文字
             GUI.Label(new Rect(labels.x, labels.y, labels.width * 0.25f, labels.height),
                 "<color=" + MutedHex + ">0%</color>", styles.Tiny);
             GUI.Label(new Rect(tickX - th.Px(18f), labels.y, th.Px(36f), labels.height),
@@ -540,6 +612,7 @@ namespace CuStatsHud.UI
                 "<color=" + MutedHex + ">100%</color>", styles.TinyRight);
         }
 
+        /// <summary>顶部状态条配色：致命红、非致命黄、正常绿、无数据灰。</summary>
         private static Color BannerColor(Severity severity)
         {
             switch (severity)
@@ -552,6 +625,18 @@ namespace CuStatsHud.UI
             }
         }
 
+        // ---------------------------------------------------------------
+        // 肢体与队友
+        // ---------------------------------------------------------------
+
+        // ---------------------------------------------------------------
+        // 肢体卡片：尽可能多地展示肢体信息
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// 肢体检视卡。竖向分带：
+        /// [图标 + 名称（要害）｜健康%] / [皮肤条 ｜ 肌肉条] / [疼痛·感染·出血·弹片] / [状态标签胶囊]
+        /// </summary>
         public static void LimbCard(Rect rect, LimbReading limb, bool striped, HudStyles styles, IconProvider icons)
         {
             Theme th = styles.Theme;
@@ -562,7 +647,7 @@ namespace CuStatsHud.UI
             float barsLine = Mathf.Max(th.SmallLine(), th.BarHeight() + th.Px(5f));
             float line3 = th.SmallLine();
             float line4 = th.SmallLine();
-            
+            // 图标隐藏时不留空位
             Texture2D icon = icons.Get(LimbIcon(limb), IconTint(limb.Severity));
             float iconSize = icon != null ? Mathf.Max(13f * th.UiScale, line1 * 0.95f) : 0f;
             float iconGap = icon != null ? th.Px(6f) : 0f;
@@ -571,6 +656,7 @@ namespace CuStatsHud.UI
             float innerW = Mathf.Max(20f, rect.width - pad * 2f);
             float y = rect.y + pad;
 
+            // 行1：图标 + 名称 | 健康%
             if (icon != null)
             {
                 DrawIcon(new Rect(innerX, y + (line1 - iconSize) * 0.5f, iconSize, iconSize), icon, limb.Severity);
@@ -585,22 +671,26 @@ namespace CuStatsHud.UI
                 styles.ValueRight);
             y += line1;
 
+            // 行2：皮肤 / 肌肉分别显示（这两项临床上区别很大）
             float half = (innerW - th.Px(10f)) * 0.5f;
             DrawHealthBar(new Rect(innerX, y, half, barsLine), "皮肤", limb.SkinHealth, styles);
             DrawHealthBar(new Rect(innerX + half + th.Px(10f), y, half, barsLine), "肌肉", limb.MuscleHealth, styles);
             y += barsLine;
 
+            // 行3：疼痛 / 感染 / 出血 / 弹片（数值全部摆出来）
             string metrics = "疼痛 " + VitalRules.Num1(limb.Pain)
                 + " · 感染 " + VitalRules.Num1(limb.Infection) + "%"
-                + " · 出血 " + VitalRules.Num2(limb.BleedLpm) + " l/m"
+                + " · 出血 " + VitalRules.Num2(limb.Bleed)
                 + " · 弹片 " + limb.Shrapnel;
             GUI.Label(new Rect(innerX, y, innerW, line3),
                 Fit("<color=" + MutedHex + ">" + metrics + "</color>", th, 2), styles.Tiny);
             y += line3;
 
+            // 行4：状态标签
             DrawLimbChips(new Rect(innerX, y, innerW, line4), limb, styles);
         }
 
+        /// <summary>皮肤/肌肉健康分条：标签 + 进度条 + 数值。</summary>
         private static void DrawHealthBar(Rect rect, string label, float value, HudStyles styles)
         {
             Theme th = styles.Theme;
@@ -629,6 +719,7 @@ namespace CuStatsHud.UI
             return Severity.Normal;
         }
 
+        /// <summary>肢体状态标签；完全没有异常时显示一个绿色的「完好」。</summary>
         private static void DrawLimbChips(Rect rect, LimbReading limb, HudStyles styles)
         {
             Theme th = styles.Theme;
@@ -641,12 +732,10 @@ namespace CuStatsHud.UI
                 limb.Splinted ? Theme.Notice : Theme.Warning, styles);
             drawn += PushChip(rect, ref x, gap, limb.Dislocated, "脱臼", Theme.Warning, styles);
 
-            if (limb.Bleed > 0.1f)
+            if (limb.Bleed > 0.01f)
             {
                 drawn += PushChip(rect, ref x, gap, true,
-                    limb.BlockedBleeding
-                        ? "出血·已止血"
-                        : "出血 " + VitalRules.Num2(limb.BleedLpm) + " l/m",
+                    limb.BlockedBleeding ? "出血·已止血" : "出血 " + VitalRules.Num2(limb.Bleed),
                     limb.BlockedBleeding ? Theme.Notice : Theme.Critical, styles);
             }
             if (limb.Infected || limb.Infection > 0.001f)
@@ -669,6 +758,7 @@ namespace CuStatsHud.UI
             }
         }
 
+        /// <summary>条件成立且仍有余量时画一个胶囊标签；返回画出数量（0 或 1）。</summary>
         private static int PushChip(Rect bounds, ref float x, float gap, bool condition, string text, Color color,
             HudStyles styles)
         {
@@ -682,13 +772,15 @@ namespace CuStatsHud.UI
             return 1;
         }
 
+        /// <summary>胶囊标签宽度。</summary>
         public static float ChipWidth(string text, HudStyles styles)
         {
-            
+            // CalcSize 用的是未缩放的字号，所以整体再乘一次绘制期缩放
             return (styles.ChipOn.CalcSize(new GUIContent(text)).x + styles.Theme.Px(16f))
                 * styles.Theme.UiScale;
         }
 
+        /// <summary>彩色胶囊标签（深色文字），用于状态标记。</summary>
         public static void Chip(Rect rect, string text, Color color, HudStyles styles)
         {
             Color old = GUI.color;
@@ -708,6 +800,11 @@ namespace CuStatsHud.UI
             return "bone";
         }
 
+        /// <summary>
+        /// 队友卡片。竖向分带：[头像] + [姓名 | 分级徽章] / [指标 | 距离] / [摘要]，底部整宽血量条。
+        /// <paramref name="avatar"/> 为 null 时不画头像（文字自动左移占满）。
+        /// <paramref name="hovered"/> 为 true 时整卡提亮并画出可点击提示线（点击查看详情）。
+        /// </summary>
         public static void MateCard(Rect rect, MateReading mate, Texture2D avatar, bool striped, bool hovered,
             HudStyles styles)
         {
@@ -741,12 +838,14 @@ namespace CuStatsHud.UI
             float textW = Mathf.Max(20f, rect.xMax - pad - textX);
             float y = rect.y + pad;
 
+            // 行1：姓名 + 分级徽章
             GUI.Label(new Rect(textX, y, Mathf.Max(20f, textW - badgeW - th.Px(6f)), line1),
                 Fit(mate.Name, th, 1), styles.MateName);
             Badge(new Rect(rect.xMax - pad - badgeW, y + (line1 - line2) * 0.5f, badgeW, line2),
                 mate.Severity, Theme.SeverityLabel(mate.Severity), styles);
             y += line1;
 
+            // 行2：指标 + 距离
             string metrics = "心率 " + VitalRules.Int0(mate.HeartRate)
                 + " · 血氧 " + VitalRules.Int0(mate.BloodOxygen) + "%"
                 + " · 意识 " + VitalRules.Int0(mate.Consciousness) + "%";
@@ -757,16 +856,19 @@ namespace CuStatsHud.UI
                 styles.MateDistance);
             y += line2;
 
+            // 行3：摘要 + 最伤肢体
             string summary = string.IsNullOrEmpty(mate.WorstLimb) ? mate.Summary : mate.Summary + " · " + mate.WorstLimb;
             GUI.Label(new Rect(textX, y, textW, line3),
                 Fit("<color=" + SummaryHex(mate.Severity) + ">" + summary + "</color>", th, 2), styles.MateMeta);
 
+            // 底部：整宽血量条
             float barY = rect.yMax - pad - barH;
             Bar(new Rect(rect.x + pad, barY, Mathf.Max(10f, rect.width - pad * 2f - th.Px(46f)), barH),
                 mate.BloodBar, Theme.SeverityColor(mate.Severity), styles);
             GUI.Label(new Rect(rect.xMax - pad - th.Px(42f), barY - th.Px(1f), th.Px(42f), barH + th.Px(2f)),
                 Fit("<color=" + MutedHex + ">血量</color>", th, 2), styles.Tiny);
 
+            // 可点击提示：悬停时底部出现一条强调色细线（点击整卡进入详情）
             if (hovered)
             {
                 Fill(new Rect(rect.x + pad, rect.yMax - th.Px(3f), Mathf.Max(10f, rect.width - pad * 2f), th.Px(2f)),
@@ -774,10 +876,15 @@ namespace CuStatsHud.UI
             }
         }
 
+        /// <summary>摘要文字色：异常时用分级色，正常时用次亮色。</summary>
         private static string SummaryHex(Severity severity)
         {
             return severity >= Severity.Warning ? Theme.SeverityHex(severity) : SecondaryHex;
         }
+
+        // ---------------------------------------------------------------
+        // 滚动
+        // ---------------------------------------------------------------
 
         private static Rect ThumbRect(Rect view, ScrollState state, float trackWidth, out Rect track, out float maxOffset)
         {
@@ -793,9 +900,14 @@ namespace CuStatsHud.UI
             return new Rect(track.x, thumbY, track.width, thumbH);
         }
 
+        /// <summary>
+        /// 滚动输入处理：滚轮 + 滚动条拖动/点击。<b>必须在绘制内容之前调用</b>，
+        /// 这样被消费掉的事件不会再被内容里的按钮响应。
+        /// 方向固定为「滚轮向上 = 内容向上移动（看更后面的内容）」。
+        /// </summary>
         public static void ScrollInput(Rect view, ScrollState state, HudStyles styles)
         {
-            
+            // 模态窗口打开时不允许滚动被压在下面的面板
             if (!GUI.enabled) return;
 
             Event e = Event.current;
@@ -832,7 +944,7 @@ namespace CuStatsHud.UI
                     }
                     else if (track.Contains(e.mousePosition))
                     {
-                        
+                        // 按滑块高度补偿，让滑块中心落到鼠标处
                         float denom = Mathf.Max(1f, view.height - thumb.height);
                         state.Offset = Mathf.Clamp(
                             (e.mousePosition.y - view.y - thumb.height * 0.5f) / denom * maxOffset, 0f, maxOffset);
@@ -859,6 +971,7 @@ namespace CuStatsHud.UI
             }
         }
 
+        /// <summary>绘制滚动条（内容绘制之后调用）。</summary>
         public static void ScrollBar(Rect view, ScrollState state, HudStyles styles)
         {
             float trackWidth = Mathf.Max(4f, styles.Theme.Px(5f));
@@ -867,6 +980,7 @@ namespace CuStatsHud.UI
             Rect thumb = ThumbRect(view, state, trackWidth, out track, out maxOffset);
             if (maxOffset <= 0f) return;
 
+            // 滚动条很细（约 5px），胶囊纹理的 border 同样会被压扁，统一用细条样式
             styles.DrawBar(track, styles.BarTrack);
 
             Color old = GUI.color;
@@ -875,6 +989,9 @@ namespace CuStatsHud.UI
             GUI.color = old;
         }
 
+        // ---------------------------------------------------------------
+
+        /// <summary>图标配色：正常时用中性灰蓝，异常时用分级色（仅程序化图标使用）。</summary>
         private static Color IconTint(Severity severity)
         {
             if (severity == Severity.Normal) return Theme.WithAlpha(Theme.TextSecondary, 0.85f);
@@ -882,6 +999,10 @@ namespace CuStatsHud.UI
             return Theme.WithAlpha(Theme.SeverityColor(severity), 0.95f);
         }
 
+        /// <summary>
+        /// 画图标。emoji 自带颜色，无法再着色，因此用透明度表达状态：
+        /// 危急/警告全亮，正常略降（避免彩色图标抢走数值的视觉焦点），无数据时压暗。
+        /// </summary>
         private static void DrawIcon(Rect rect, Texture2D icon, Severity severity)
         {
             if (icon == null) return;

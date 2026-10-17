@@ -6,19 +6,30 @@ using UnityEngine;
 
 namespace CuStatsHud.UI
 {
-    
+    /// <summary>
+    /// 内嵌 emoji 图标的加载与缓存。
+    ///
+    /// 图标以 <c>EmbeddedResource</c> 打进 DLL（逻辑名 <c>CUStatsHud.emoji.&lt;码点&gt;</c>），
+    /// 因此插件是单文件分发、不需要额外的图片目录，也不会被游戏资源卸载影响。
+    /// 图片为 128×128 PNG，绘制时由 GUI 双线性缩放到实际尺寸。
+    /// </summary>
     internal sealed class EmojiIcons : IDisposable
     {
         private const string ResourcePrefix = "CUStatsHud.emoji.";
 
+        /// <summary>整体过暗、且低饱和（深灰线条图标）在近黑面板上看不清，需要抬亮。</summary>
         private const float DarkLumaThreshold = 0.42f;
 
+        /// <summary>饱和度上限：只有低饱和（灰阶）的暗图标才抬亮。</summary>
         private const float DarkChromaThreshold = 0.22f;
 
+        /// <summary>抬亮后的目标平均亮度。</summary>
         private const float TargetLuma = 0.62f;
 
+        /// <summary>码点 → 纹理；值为 null 表示该码点没有资源（同样缓存，避免反复查找）。</summary>
         private readonly Dictionary<string, Texture2D> _cache = new Dictionary<string, Texture2D>(StringComparer.Ordinal);
 
+        /// <summary>取图标；没有对应资源时返回 null。</summary>
         public Texture2D Get(string code)
         {
             if (string.IsNullOrEmpty(code)) return null;
@@ -31,6 +42,7 @@ namespace CuStatsHud.UI
             return texture;
         }
 
+        /// <summary>预载一组码点（首次解析时一次性解码，避免首次打开标签页时掉帧）。</summary>
         public void Preload(IEnumerable<string> codes)
         {
             if (codes == null) return;
@@ -85,6 +97,13 @@ namespace CuStatsHud.UI
             }
         }
 
+        /// <summary>
+        /// 面板底色接近纯黑，整体偏暗的灰阶 emoji（典型：🩺 深灰听诊器）几乎看不见，
+        /// 因此载入时做一次亮度抬升：<c>rgb' = rgb + (1-rgb)*k</c>，保持色相。
+        ///
+        /// 判据是「暗 <b>且</b> 低饱和」：饱和的深色图标（🩸 血滴、🫀 心脏、💥 冲击）
+        /// 在深色背景上对比度本来就够，抬亮只会让它们变粉、丢掉辨识度。
+        /// </summary>
         private static void LiftIfTooDark(Texture2D texture)
         {
             try
@@ -131,7 +150,7 @@ namespace CuStatsHud.UI
             }
             catch (Exception)
             {
-                
+                // 抬亮失败不影响使用，保留原始贴图
             }
         }
     }

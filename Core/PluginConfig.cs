@@ -3,62 +3,65 @@ using UnityEngine;
 
 namespace CuStatsHud.Core
 {
-    
+    /// <summary>
+    /// 插件全部持久化配置。
+    ///
+    /// 键名与 v1.2 完全兼容：旧配置文件（[UI] Opacity/Tab/FontSize/FontMode/Scale、
+    /// [About] BilibiliName/BilibiliUID）无需改动即可继续使用。
+    /// </summary>
     internal sealed class PluginConfig
     {
-        
+        // ---------- 界面 ----------
         public readonly ConfigEntry<float> Opacity;
         public readonly ConfigEntry<float> Scale;
         public readonly ConfigEntry<int> FontSize;
         public readonly ConfigEntry<string> FontMode;
         public readonly ConfigEntry<int> Tab;
 
+        /// <summary>界面皮肤：fox = CU-UI（小狐狸 UI，圆角现代风）/ game = 游戏 UI 风格（方角硬边框）。</summary>
         public readonly ConfigEntry<string> Skin;
 
-        public readonly ConfigEntry<float> CustomHue;
-        
-        public readonly ConfigEntry<float> CustomDark;
-        
-        public readonly ConfigEntry<float> CustomSaturation;
-        
-        public readonly ConfigEntry<bool> BackgroundEnabled;
-        
-        public readonly ConfigEntry<float> BackgroundOpacity;
-        
-        public readonly ConfigEntry<string> BackgroundFile;
-
+        /// <summary>是否显示 emoji 图标（关闭后改用程序化绘制的几何图标）。</summary>
         public readonly ConfigEntry<bool> ShowEmoji;
 
+        // ---------- 窗口几何（-1 = 自动摆放）----------
         public readonly ConfigEntry<float> WindowX;
         public readonly ConfigEntry<float> WindowY;
         public readonly ConfigEntry<float> WindowWidth;
         public readonly ConfigEntry<float> WindowHeight;
 
+        // ---------- 交互 ----------
         public readonly ConfigEntry<KeyboardShortcut> ToggleKey;
-        
+        /// <summary>显示/隐藏浮动组件卡的快捷键。</summary>
         public readonly ConfigEntry<KeyboardShortcut> FloatKey;
         public readonly ConfigEntry<bool> Resizable;
 
+        // ---------- 监护功能 ----------
         public readonly ConfigEntry<bool> WaveformsEnabled;
         public readonly ConfigEntry<bool> AlertsEnabled;
         public readonly ConfigEntry<bool> AlertFlash;
         public readonly ConfigEntry<bool> ShowLimits;
         public readonly ConfigEntry<bool> ShowNormalSecondary;
 
+        // ---------- 浮动副本卡片 ----------
+        /// <summary>序列化的浮动卡片列表（格式见 FloatCardRules），由界面自动写入。</summary>
         public readonly ConfigEntry<string> FloatCards;
 
+        /// <summary>组件卡当前是否显示（摆放界面里保存，或由快捷键切换）。</summary>
         public readonly ConfigEntry<bool> FloatCardsEnabled;
 
+        /// <summary>摆放方格的边长（像素），决定网格密度。</summary>
         public readonly ConfigEntry<int> GridSize;
 
+        // ---------- 关于 ----------
         public readonly ConfigEntry<string> AuthorName;
         public readonly ConfigEntry<string> AuthorUid;
-        
-        public readonly ConfigEntry<string> GitHubUrl;
 
+        /// <summary>窗口宽度/高度的出厂默认值（未经 Scale 缩放）。</summary>
         public const float DefaultWidth = 566f;
         public const float DefaultHeight = 742f;
 
+        /// <summary>窗口位置的“自动摆放”哨兵值。</summary>
         public const float AutoPos = -1f;
 
         public PluginConfig(ConfigFile cfg)
@@ -75,26 +78,9 @@ namespace CuStatsHud.Core
                 new ConfigDescription("当前标签页 (0=生命体征 1=肢体 2=队友 3=设置 4=统计)", new AcceptableValueRange<int>(0, 4)));
 
             Skin = cfg.Bind("UI", "Skin", "fox",
-                "界面风格：fox = 原版 UI（深蓝黑 + 紫蓝）/ game = 游戏风格（灰阶 + 青绿）/ custom = 自定义");
+                "界面风格：fox = CU-UI（小狐狸 UI，圆角现代风）/ game = 游戏 UI 风格（方角硬边框）");
             ShowEmoji = cfg.Bind("UI", "ShowEmoji", true,
                 "是否显示 emoji 小图标（关闭后改用程序化绘制的几何图标）");
-
-            CustomHue = cfg.Bind("Theme", "Hue", 0.62f,
-                new ConfigDescription("自定义配色的色相（0-1；0.0 红 / 0.33 绿 / 0.62 蓝紫 / 0.83 品红）",
-                    new AcceptableValueRange<float>(0f, 1f)));
-            CustomDark = cfg.Bind("Theme", "Dark", 0.35f,
-                new ConfigDescription("自定义配色的底色明度（0 = 很暗 / 1 = 偏亮，但始终是深色界面）",
-                    new AcceptableValueRange<float>(0f, 1f)));
-            CustomSaturation = cfg.Bind("Theme", "Saturation", 0.5f,
-                new ConfigDescription("自定义配色的强调强度（0 = 近乎灰阶 / 1 = 强调色最鲜艳）",
-                    new AcceptableValueRange<float>(0f, 1f)));
-            BackgroundEnabled = cfg.Bind("Theme", "BackgroundEnabled", true,
-                "是否显示自定义底图（关掉后保留已选图片，可随时再打开）");
-            BackgroundOpacity = cfg.Bind("Theme", "BackgroundOpacity", 0.35f,
-                new ConfigDescription("自定义底图的透明度（1% ~ 100%）",
-                    new AcceptableValueRange<float>(0.01f, 1f)));
-            BackgroundFile = cfg.Bind("Theme", "BackgroundFile", "CUStatsHud-bg.png",
-                "自定义底图的文件名（放在 BepInEx/config 下；支持 png / jpg）");
 
             WindowX = cfg.Bind("Window", "X", AutoPos, "面板左上角 X 坐标（-1 = 自动靠右摆放）");
             WindowY = cfg.Bind("Window", "Y", AutoPos, "面板左上角 Y 坐标（-1 = 自动垂直居中）");
@@ -103,7 +89,7 @@ namespace CuStatsHud.Core
             WindowHeight = cfg.Bind("Window", "Height", DefaultHeight,
                 new ConfigDescription("面板高度（未经 Scale 缩放，最小 300）", new AcceptableValueRange<float>(300f, 1600f)));
 
-            ToggleKey = cfg.Bind("Keys", "Toggle", new KeyboardShortcut(KeyCode.N),
+            ToggleKey = cfg.Bind("Keys", "Toggle", new KeyboardShortcut(KeyCode.F1),
                 "显示/隐藏面板的快捷键（也可在设置页内点击“重新绑定”后直接按键）");
             FloatKey = cfg.Bind("Keys", "FloatToggle", new KeyboardShortcut(KeyCode.F2),
                 "显示/隐藏浮动组件卡的快捷键");
@@ -118,8 +104,6 @@ namespace CuStatsHud.Core
 
             AuthorName = cfg.Bind("About", "BilibiliName", "纯种小狐狸", "作者 B 站昵称");
             AuthorUid = cfg.Bind("About", "BilibiliUID", "1951065665", "作者 B 站 UID");
-            GitHubUrl = cfg.Bind("About", "GitHubUrl", "https://github.com/blue-star-fox/CU-STARS-HUD",
-                "GitHub 仓库地址（关于窗口里点击可打开浏览器）");
 
             FloatCards = cfg.Bind("FloatCards", "Cards", string.Empty,
                 "浮动副本卡片：kind|key|x|y|opacity，多条用 ; 分隔。在「组件卡摆放」界面里拖拽生成，界面会自动写回这里");
@@ -130,11 +114,13 @@ namespace CuStatsHud.Core
                     new AcceptableValueRange<int>(8, 96)));
         }
 
+        /// <summary>窗口宽度换算值：配置 + 下限保护。</summary>
         public float ClampedWidth()
         {
             return Mathf.Max(360f, WindowWidth.Value);
         }
 
+        /// <summary>窗口高度换算值：配置 + 下限保护。</summary>
         public float ClampedHeight()
         {
             return Mathf.Max(300f, WindowHeight.Value);

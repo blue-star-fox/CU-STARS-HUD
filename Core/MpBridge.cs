@@ -4,25 +4,32 @@ using System.Reflection;
 
 namespace CuStatsHud.Core
 {
-    
+    /// <summary>
+    /// KrokoshaCasualtiesMP（联机 MOD）的纯反射桥。
+    ///
+    /// 全程反射、不引用该 MOD，因此插件在未安装联机 MOD 时同样可用，
+    /// 且不会因 MOD 版本变动而加载失败。所有成员都在首次成功定位后缓存，
+    /// 之后每轮刷新只做 GetValue，不再做类型查找。
+    /// </summary>
     internal sealed class MpBridge
     {
-        
+        /// <summary>一名存活玩家的反射视图。</summary>
         public struct Entry
         {
             public string Name;
             public UnityEngine.Object BodyObject;
             public bool IsLocal;
             public float Ping;
-            
+            /// <summary>SteamID（0 = 未知）。</summary>
             public ulong SteamId;
-            
+            /// <summary>头像原图（联机 MOD 已加载好的 Texture2D）；为 null 表示暂无。</summary>
             public object Avatar;
         }
 
         private const string ModAssemblyName = "KrokoshaCasualtiesMP";
         private const string NetPlayerTypeName = "KrokoshaCasualtiesMP.NetPlayer";
 
+        /// <summary>未找到 MOD 时的重扫间隔（秒）：MOD 可能在插件之后才加载完成。</summary>
         private const float RescanInterval = 5f;
 
         private bool _scanned;
@@ -42,11 +49,16 @@ namespace CuStatsHud.Core
         private FieldInfo _fAvatarMedium;
         private FieldInfo _fAvatarSmall;
 
+        /// <summary>联机 MOD 是否已就绪（AllLivingPlayers 等成员均已解析）。</summary>
         public bool Available
         {
             get { return _available; }
         }
 
+        /// <summary>
+        /// 尝试解析 MOD 类型。MOD 可能在插件之后才加载，
+        /// 因此解析失败时按 <see cref="RescanInterval"/> 周期重试，而不是一次定生死。
+        /// </summary>
         public void EnsureInitialized()
         {
             if (_available) return;
@@ -81,12 +93,15 @@ namespace CuStatsHud.Core
                 _fPing = _netPlayerType.GetField("ping", Instance);
                 _pIsLocal = _netPlayerType.GetProperty("is_local", Instance);
 
+                // Steam 身份与头像：MOD 会把头像加载好挂在 NetPlayer 上，
+                // 优先读候选属性（内部已做 large→medium→small 回退），再退回三个字段。
                 _fSteamId = _netPlayerType.GetField("SteamId", Instance);
                 _pAvatar = _netPlayerType.GetProperty("profilepic_any_largetosmall", Instance);
                 _fAvatarLarge = _netPlayerType.GetField("profilepic_largeicon", Instance);
                 _fAvatarMedium = _netPlayerType.GetField("profilepic_mediumicon", Instance);
                 _fAvatarSmall = _netPlayerType.GetField("profilepic_smallicon", Instance);
 
+                // body 是唯一必需的成员：没有它就无法读取任何玩家数据
                 _available = _fBody != null && (_fAllLiving != null || _fLocalPlayer != null);
             }
             catch (Exception)
@@ -107,6 +122,7 @@ namespace CuStatsHud.Core
             }
         }
 
+        /// <summary>清理解析状态以便下次重新扫描。</summary>
         public void Reset()
         {
             _scanned = false;
@@ -125,6 +141,7 @@ namespace CuStatsHud.Core
             _fAvatarSmall = null;
         }
 
+        /// <summary>读取本地玩家：返回显示名与 Body；失败时 name 为 null、body 为 null。</summary>
         public UnityEngine.Object GetLocalBodyObject()
         {
             if (!_available || _fLocalPlayer == null) return null;
@@ -140,6 +157,7 @@ namespace CuStatsHud.Core
             }
         }
 
+        /// <summary>读取本地玩家名；失败返回 null。</summary>
         public string GetLocalPlayerName()
         {
             if (!_available || _fLocalPlayer == null || _fName == null) return null;
@@ -155,6 +173,10 @@ namespace CuStatsHud.Core
             }
         }
 
+        /// <summary>
+        /// 收集所有存活玩家。结果写入调用方传入的列表（复用，避免每轮分配）。
+        /// 返回是否走了联机路径。
+        /// </summary>
         public bool CollectLivingPlayers(List<Entry> into)
         {
             into.Clear();
@@ -187,7 +209,7 @@ namespace CuStatsHud.Core
                         }
                         catch (Exception)
                         {
-                            
+                            // is_local 读取失败时退化为“按 body 比对本地玩家”
                         }
                     }
 
@@ -237,7 +259,10 @@ namespace CuStatsHud.Core
                 return false;
             }
         }
-        
+        /// <summary>
+        /// 读取玩家头像原图。MOD 是懒加载的，刚进游戏时可能为 null，
+        /// 因此这里只做「拿不到就返回 null」，由 UI 层限时重试。
+        /// </summary>
         private object ReadAvatar(object player)
         {
             try
@@ -265,7 +290,7 @@ namespace CuStatsHud.Core
             }
             catch (Exception)
             {
-                
+                // 头像读取失败不影响其它数据
             }
             return null;
         }
