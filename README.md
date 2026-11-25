@@ -1,4 +1,4 @@
-# CU Stats Hub
+# CU Stats Hud
 
 > 一个 CU（Casualties Unknown）角色状态监护面板插件 —— 床旁监护仪风格。
 
